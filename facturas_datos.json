@@ -1,5 +1,5 @@
 {
-  "fecha_generacion": "2026-04-30",
+  "fecha_generacion": "2026-05-01",
   "rango": "2025-10-01 a 2026-03-20",
   "emisor_propio": {
     "nombre": "Estudio Creativo Vega SL",
@@ -260,6 +260,22 @@
       "irpf_porcentaje": 0,
       "irpf_cantidad": 0,
       "total": 72.59,
+      "moneda": "EUR"
+    },
+    {
+      "archivo": "gastos/factura_carmen_fortes_30-03-2026.pdf",
+      "tipo": "gasto",
+      "numero": "CF-30-03",
+      "fecha": "2026-03-30",
+      "emisor": "(proveedor):",
+      "receptor": "Cliente General",
+      "concepto": "IMPORTE",
+      "base_imponible": 500.0,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 105.0,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0,
+      "total": 0.0,
       "moneda": "EUR"
     }
   ]
