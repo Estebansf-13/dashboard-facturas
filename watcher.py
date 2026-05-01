@@ -17,6 +17,7 @@ import json
 import time
 import zlib
 import shutil
+import subprocess
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -225,6 +226,17 @@ def extraer_datos_factura(texto: str, filename: str) -> dict:
     return datos
 
 
+def publicar_en_github(numero: str):
+    """Sube el JSON actualizado a GitHub para que el dashboard online se refresque."""
+    try:
+        subprocess.run(['git', 'add', 'facturas_datos.json'], cwd=BASE_DIR, check=True)
+        subprocess.run(['git', 'commit', '-m', f'Factura {numero} añadida'], cwd=BASE_DIR, check=True)
+        subprocess.run(['git', 'push'], cwd=BASE_DIR, check=True)
+        print(f"  🌐 Dashboard online actualizado: https://estebansf-13.github.io/dashboard-facturas/dashboard-facturacion.html")
+    except Exception as e:
+        print(f"  ⚠ No se pudo subir a GitHub: {e}")
+
+
 def actualizar_json(datos_factura: dict):
     """Añade la factura al JSON y guarda."""
     with open(JSON_PATH, 'r', encoding='utf-8') as f:
@@ -287,7 +299,10 @@ def procesar_factura(filepath: str):
 
     # 4. Actualizar JSON
     actualizar_json(datos)
-    print(f"  ✅ JSON actualizado — El dashboard se actualizará automáticamente")
+    print(f"  ✅ JSON actualizado")
+
+    # 5. Subir a GitHub
+    publicar_en_github(datos["numero"])
 
 
 class NuevaFacturaHandler(FileSystemEventHandler):
