@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Facturación · Estudio Creativo Vega SL</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1419;
+    --bg-card: #1a2028;
+    --bg-card-hover: #222a35;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --text-dim: #8b96a5;
+    --text-faint: #5a6573;
+    --accent: #6ea8fe;
+    --green: #3fb950;
+    --green-soft: rgba(63, 185, 80, 0.12);
+    --red: #f85149;
+    --red-soft: rgba(248, 81, 73, 0.12);
+    --yellow: #d29922;
+    --yellow-soft: rgba(210, 153, 34, 0.15);
+    --purple: #a371f7;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding: 32px 24px 64px;
+  }
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+  }
+  .header .subtitle {
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  .header .meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .header .meta-item {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .header .meta-item strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Reload indicator */
+  .reload-indicator {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    background: var(--green-soft);
+    color: var(--green);
+    border: 1px solid var(--green);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.4s;
+    z-index: 999;
+    pointer-events: none;
+  }
+
+  /* Section title */
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-faint);
+    margin: 40px 0 16px;
+  }
+
+  /* KPI grid */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .kpi {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    transition: all 0.15s;
+  }
+  .kpi:hover { background: var(--bg-card-hover); border-color: #3a4553; }
+  .kpi .label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .kpi .value {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+  .kpi .value .currency { font-size: 18px; color: var(--text-dim); margin-left: 4px; }
+  .kpi .sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+  .kpi.green .value { color: var(--green); }
+  .kpi.red .value { color: var(--red); }
+  .kpi.blue .value { color: var(--accent); }
+  .kpi.purple .value { color: var(--purple); }
+  .kpi.yellow .value { color: var(--yellow); }
+
+  /* Card */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .card-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .card-grid-2 { grid-template-columns: 1fr; } }
+
+  /* Bar chart */
+  .chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    height: 240px;
+    padding: 16px 0 8px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .chart .month {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+    gap: 2px;
+  }
+  .chart .bars {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    height: 100%;
+    width: 100%;
+    justify-content: center;
+  }
+  .chart .bar {
+    width: 18px;
+    border-radius: 4px 4px 0 0;
+    transition: opacity 0.2s;
+    position: relative;
+    cursor: default;
+  }
+  .chart .bar:hover { opacity: 0.85; }
+  .chart .bar.income { background: linear-gradient(180deg, #4cc266, #3fb950); }
+  .chart .bar.expense { background: linear-gradient(180deg, #ff6b63, #f85149); }
+  .chart .bar .tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #000;
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    margin-bottom: 4px;
+  }
+  .chart .bar:hover .tooltip { opacity: 1; }
+  .chart-labels {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .chart-labels .month-label {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+  .legend-dot.income { background: #3fb950; }
+  .legend-dot.expense { background: #f85149; }
+
+  /* Trimestre table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-dim); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+  /* Cliente bars */
+  .cliente-row {
+    display: grid;
+    grid-template-columns: 1fr 100px;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .cliente-info { min-width: 0; }
+  .cliente-nombre { font-weight: 500; font-size: 14px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; }
+  .cliente-importe { color: var(--text-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .cliente-bar-wrap {
+    background: rgba(255,255,255,0.05);
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .cliente-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--purple));
+    border-radius: 3px;
+  }
+  .cliente-pct { font-size: 12px; color: var(--text-dim); text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Alerts */
+  .alert {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    border-left: 3px solid;
+  }
+  .alert .icon { font-size: 16px; flex-shrink: 0; }
+  .alert.info { background: rgba(110, 168, 254, 0.08); border-color: var(--accent); }
+  .alert.warning { background: var(--yellow-soft); border-color: var(--yellow); }
+  .alert.success { background: var(--green-soft); border-color: var(--green); }
+  .alert strong { color: var(--text); }
+
+  /* Tipo badge */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .badge.ingreso { background: var(--green-soft); color: var(--green); }
+  .badge.gasto { background: var(--red-soft); color: var(--red); }
+
+  .neg { color: var(--red); }
+  .pos { color: var(--green); }
+
+  /* Footer */
+  .footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+
+  /* Live dot */
+  .live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  @media print {
+    body { background: white; color: black; padding: 16px; }
+    .card, .kpi { background: white; border-color: #ccc; }
+    .chart .bar.income { background: #3fb950; }
+    .chart .bar.expense { background: #f85149; }
+    .reload-indicator, .live-dot { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="reload-indicator" class="reload-indicator">✓ Datos actualizados</div>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <h1>Dashboard de Facturación</h1>
+    <div class="subtitle" id="d-empresa">Cargando...</div>
+    <div class="meta">
+      <div class="meta-item" id="d-periodo"></div>
+      <div class="meta-item" id="d-conteo"></div>
+      <div class="meta-item"><strong>0 errores</strong> de extracción</div>
+    </div>
+  </div>
+
+  <!-- KPIs principales -->
+  <div class="section-title">Resumen ejecutivo</div>
+  <div class="kpi-grid">
+    <div class="kpi green">
+      <div class="label">Facturación neta</div>
+      <div class="value" id="kpi-ing">—</div>
+      <div class="sub" id="kpi-ing-sub"></div>
+    </div>
+    <div class="kpi red">
+      <div class="label">Gastos netos</div>
+      <div class="value" id="kpi-gas">—</div>
+      <div class="sub" id="kpi-gas-sub"></div>
+    </div>
+    <div class="kpi blue">
+      <div class="label">Beneficio (antes impuestos)</div>
+      <div class="value" id="kpi-ben">—</div>
+      <div class="sub" id="kpi-ben-sub"></div>
+    </div>
+    <div class="kpi yellow">
+      <div class="label">IVA a liquidar</div>
+      <div class="value" id="kpi-iva">—</div>
+      <div class="sub" id="kpi-iva-sub"></div>
+    </div>
+    <div class="kpi purple">
+      <div class="label">IRPF retenido</div>
+      <div class="value" id="kpi-irpf">—</div>
+      <div class="sub">Deducible en declaración anual</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Total cobrado</div>
+      <div class="value" id="kpi-cobrado">—</div>
+      <div class="sub">Tras IVA e IRPF</div>
+    </div>
+  </div>
+
+  <!-- Evolución mensual -->
+  <div class="section-title">Evolución mensual</div>
+  <div class="card">
+    <h3>Facturación mes a mes (base imponible)</h3>
+    <div class="chart" id="chart"></div>
+    <div class="chart-labels" id="chart-labels"></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot income"></div>Ingresos</div>
+      <div class="legend-item"><div class="legend-dot expense"></div>Gastos</div>
+    </div>
+  </div>
+
+  <!-- Trimestres + Clientes -->
+  <div class="card-grid-2">
+    <div class="card">
+      <h3>Liquidación de IVA por trimestre</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Trimestre</th>
+            <th class="num">Repercutido</th>
+            <th class="num">Soportado</th>
+            <th class="num">A liquidar</th>
+          </tr>
+        </thead>
+        <tbody id="trim-body"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Top clientes por facturación</h3>
+      <div id="clientes"></div>
+    </div>
+  </div>
+
+  <!-- Alertas -->
+  <div class="section-title">Observaciones</div>
+  <div class="card" id="alertas"></div>
+
+  <!-- Tabla detalle -->
+  <div class="section-title">Detalle de facturas</div>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Fecha</th>
+          <th>Nº</th>
+          <th>Cliente / Proveedor</th>
+          <th>Concepto</th>
+          <th class="num">Base</th>
+          <th class="num">IVA</th>
+          <th class="num">IRPF</th>
+          <th class="num">Total</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-body"></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span class="live-dot"></span>
+    <span id="footer-fecha">Cargando datos...</span>
+  </div>
+
+</div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>
