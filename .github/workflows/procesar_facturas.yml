@@ -1,0 +1,34 @@
+name: Procesar Facturas
+
+on:
+  push:
+    paths:
+      - 'facturas/nuevas/**.pdf'
+      - 'facturas/nuevas/**.PDF'
+
+jobs:
+  procesar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install pdfplumber
+
+      - name: Procesar facturas nuevas
+        run: python procesar_gha.py
+
+      - name: Subir cambios al repositorio
+        run: |
+          git config user.name "Dashboard Bot"
+          git config user.email "bot@dashboard-facturas"
+          git add facturas_datos.json facturas/
+          git diff --staged --quiet || git commit -m "Factura procesada automaticamente [skip ci]"
+          git push
