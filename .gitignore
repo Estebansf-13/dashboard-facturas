@@ -2,6 +2,4 @@
 __pycache__/
 *.pyc
 .claude/
-facturas/ingresos/
-facturas/gastos/
-facturas/nuevas/
+procesar.log

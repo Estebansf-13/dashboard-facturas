@@ -162,6 +162,11 @@ def main():
     with open(JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+    # Si corre en GitHub Actions el workflow se encarga del push
+    if os.environ.get('GITHUB_ACTIONS'):
+        log(f"  JSON actualizado — el workflow de GitHub hará el commit")
+        return
+
     try:
         subprocess.run(['git', 'add', 'facturas_datos.json'], cwd=BASE_DIR, check=True)
         subprocess.run(['git', 'commit', '-m', f'{procesados} factura(s) nueva(s)'], cwd=BASE_DIR, check=True)

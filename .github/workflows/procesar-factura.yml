@@ -1,0 +1,33 @@
+name: Procesar factura nueva
+
+on:
+  push:
+    paths:
+      - 'facturas/nuevas/**'
+
+permissions:
+  contents: write
+
+jobs:
+  procesar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Procesar facturas
+        run: python procesar.py
+
+      - name: Guardar cambios en GitHub
+        run: |
+          git config user.name "Dashboard Bot"
+          git config user.email "bot@dashboard-facturas.com"
+          git add facturas_datos.json
+          git rm --cached "facturas/nuevas/"*.pdf "facturas/nuevas/"*.PDF 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "Factura procesada automáticamente"
+          git push
