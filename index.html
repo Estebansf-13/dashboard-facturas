@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboards de Facturación</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1419;
+    --bg-card: #1a2028;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --text-dim: #8b96a5;
+    --accent: #6ea8fe;
+    --green: #3fb950;
+    --purple: #a371f7;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .header p {
+    color: var(--text-dim);
+    font-size: 15px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    max-width: 720px;
+    width: 100%;
+  }
+  .empresa-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: border-color 0.15s;
+  }
+  .empresa-card:hover { border-color: #3a4553; }
+  .empresa-num {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .empresa-nombre {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    letter-spacing: -0.3px;
+  }
+  .empresa-card.e1 .empresa-nombre { color: var(--accent); }
+  .empresa-card.e2 .empresa-nombre { color: var(--purple); }
+  .btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary {
+    background: rgba(110, 168, 254, 0.12);
+    border: 1px solid rgba(110, 168, 254, 0.3);
+    color: var(--accent);
+  }
+  .empresa-card.e2 .btn-primary {
+    background: rgba(163, 113, 247, 0.12);
+    border-color: rgba(163, 113, 247, 0.3);
+    color: var(--purple);
+  }
+  .btn-secondary {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .btn-icon { font-size: 16px; }
+  .footer {
+    margin-top: 48px;
+    font-size: 12px;
+    color: #3a4553;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Dashboards de Facturación</h1>
+  <p>Selecciona una empresa para ver su dashboard o subir facturas</p>
+</div>
+
+<div class="grid">
+
+  <div class="empresa-card e1">
+    <div class="empresa-num">Empresa 1</div>
+    <div class="empresa-nombre">Empresa Original Prueba 1</div>
+    <div class="btn-group">
+      <a class="btn btn-primary" href="empresa-original-prueba-1/dashboard-facturacion.html">
+        <span class="btn-icon">📊</span> Ver dashboard
+      </a>
+      <a class="btn btn-secondary" href="empresa-original-prueba-1/subir.html">
+        <span class="btn-icon">📤</span> Subir factura
+      </a>
+    </div>
+  </div>
+
+  <div class="empresa-card e2">
+    <div class="empresa-num">Empresa 2</div>
+    <div class="empresa-nombre">Carmen Fortes Pardo</div>
+    <div class="btn-group">
+      <a class="btn btn-primary" href="empresa-2-carmen-fortes/dashboard-facturacion.html">
+        <span class="btn-icon">📊</span> Ver dashboard
+      </a>
+      <a class="btn btn-secondary" href="empresa-2-carmen-fortes/subir.html">
+        <span class="btn-icon">📤</span> Subir factura
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">Procesado automáticamente · GitHub Pages · GitHub Actions</div>
+
+</body>
+</html>

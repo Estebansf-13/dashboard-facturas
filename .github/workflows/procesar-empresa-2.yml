@@ -1,0 +1,37 @@
+name: Procesar Facturas — Empresa 2 Carmen Fortes
+
+on:
+  push:
+    paths:
+      - 'empresa-2-carmen-fortes/facturas/nuevas/**.pdf'
+      - 'empresa-2-carmen-fortes/facturas/nuevas/**.PDF'
+
+jobs:
+  procesar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install pdfplumber
+
+      - name: Procesar facturas nuevas
+        run: python empresa-2-carmen-fortes/procesar_gha.py
+
+      - name: Subir cambios al repositorio
+        run: |
+          git config user.name "Dashboard Bot"
+          git config user.email "bot@dashboard-facturas"
+          git add empresa-2-carmen-fortes/facturas_datos.json empresa-2-carmen-fortes/facturas/
+          git diff --staged --quiet || git commit -m "Carmen Fortes: factura procesada [skip ci]"
+          git pull --rebase origin main
+          git push
