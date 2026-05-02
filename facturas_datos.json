@@ -1,6 +1,6 @@
 {
   "fecha_generacion": "2026-05-02",
-  "rango": "2025-10-01 a 2026-03-20",
+  "rango": "2025-10-01 a 2026-05-01",
   "emisor_propio": {
     "nombre": "Estudio Creativo Vega SL",
     "cif": "B-12345678"
@@ -263,35 +263,19 @@
       "moneda": "EUR"
     },
     {
-      "archivo": "gastos/Minuta stro  01202400140907.pdf",
-      "tipo": "gasto",
-      "numero": "Minuta stro  01202400140907",
-      "fecha": "",
-      "emisor": "",
-      "receptor": "",
-      "concepto": "",
-      "base_imponible": 0.0,
+      "archivo": "ingresos/factura_54_carmen_fortes_01-05-2026.pdf",
+      "tipo": "ingreso",
+      "numero": "54",
+      "fecha": "2026-05-01",
+      "emisor": "Carmen Fortes Pardo",
+      "receptor": "OCASO, S.A. CIA. DE SEGUROS Y REASEGUROS",
+      "concepto": "Minuta honorarios profesionales - Juicio Verbal Civil 302/2025 - Stro 01202400140907",
+      "base_imponible": 527.46,
       "iva_porcentaje": 21,
-      "iva_cantidad": 0.0,
-      "irpf_porcentaje": 0,
-      "irpf_cantidad": 0,
-      "total": 0.0,
-      "moneda": "EUR"
-    },
-    {
-      "archivo": "gastos/factura_carmen_fortes_30-03-2026.pdf",
-      "tipo": "gasto",
-      "numero": "CF-30-03",
-      "fecha": "2026-03-30",
-      "emisor": "",
-      "receptor": "Cliente General",
-      "concepto": "",
-      "base_imponible": 500.0,
-      "iva_porcentaje": 21,
-      "iva_cantidad": 105.0,
-      "irpf_porcentaje": 0,
-      "irpf_cantidad": 0,
-      "total": 605.0,
+      "iva_cantidad": 110.77,
+      "irpf_porcentaje": -15,
+      "irpf_cantidad": -79.12,
+      "total": 559.11,
       "moneda": "EUR"
     }
   ]
