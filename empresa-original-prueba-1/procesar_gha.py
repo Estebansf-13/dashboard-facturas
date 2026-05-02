@@ -172,13 +172,26 @@ def extraer_datos(texto):
     if m:
         d["total"] = parsear_importe(m.group(1))
 
+    # Calcular IVA si falta
     if d["base_imponible"] == 0 and d["total"] > 0:
         d["base_imponible"] = round(d["total"] / 1.21, 2)
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
+    elif d["iva_cantidad"] == 0 and d["base_imponible"] > 0 and d["total"] > d["base_imponible"]:
+        d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
 
-    if EMISOR_PROPIO.lower() in d["emisor"].lower():
-        d["tipo"] = "ingreso"
-    elif EMISOR_PROPIO.lower() in d["receptor"].lower():
+    # Clasificar con heurística robusta para OCR sucio
+    emisor_lower = d["emisor"].lower()
+    receptor_lower = d["receptor"].lower()
+    nombre_lower = EMISOR_PROPIO.lower()
+    palabras_ocr_basura = ['factura', 'número', 'fecha', 'cantidad', 'precio', 'importe', 'nif', 'cif', 'total']
+
+    if nombre_lower in emisor_lower:
+        es_basura = (len(d["emisor"]) > 60 or
+                     any(p in emisor_lower for p in palabras_ocr_basura) or
+                     any(c.isdigit() for c in d["emisor"][:15]))
+        if not es_basura:
+            d["tipo"] = "ingreso"
+    elif nombre_lower in receptor_lower:
         d["tipo"] = "gasto"
 
     return d
