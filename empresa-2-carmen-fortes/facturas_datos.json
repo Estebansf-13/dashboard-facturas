@@ -1,9 +1,26 @@
 {
-  "fecha_generacion": "",
+  "fecha_generacion": "2026-05-02",
   "rango": "",
   "emisor_propio": {
     "nombre": "Carmen Fortes Pardo",
     "cif": "B-XXXXXXXX"
   },
-  "facturas": []
+  "facturas": [
+    {
+      "archivo": "gastos/facturasercyn1829sc-2026351.pdf",
+      "tipo": "gasto",
+      "numero": "facturasercyn1829sc-2026351",
+      "fecha": "2026-04-22",
+      "emisor": "LA FE FORTES PARDO",
+      "receptor": "ILUSTRE COLEGIO DE PROCURADORES DE LOS",
+      "concepto": "Importe",
+      "base_imponible": 7.0,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 1.47,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0,
+      "total": 8.47,
+      "moneda": "EUR"
+    }
+  ]
 }
