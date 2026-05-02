@@ -25,9 +25,11 @@ jobs:
         run: sudo apt-get install -y tesseract-ocr tesseract-ocr-spa poppler-utils
 
       - name: Instalar dependencias Python
-        run: pip install pdfplumber pdf2image pillow pytesseract
+        run: pip install pdfplumber pdf2image pillow pytesseract google-generativeai
 
       - name: Procesar facturas nuevas
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python empresa-2-carmen-fortes/procesar_gha.py
 
       - name: Validar JSON antes de subir
