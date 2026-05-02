@@ -39,22 +39,6 @@
       "moneda": "EUR"
     },
     {
-      "archivo": "gastos/factura-1-000908.pdf",
-      "tipo": "gasto",
-      "numero": "factura-1-000908",
-      "fecha": "2025-11-24",
-      "emisor": "LA FE FORTES PARDO",
-      "receptor": "",
-      "concepto": "",
-      "base_imponible": 0.0,
-      "iva_porcentaje": 21,
-      "iva_cantidad": 0.0,
-      "irpf_porcentaje": 0,
-      "irpf_cantidad": 0,
-      "total": 0.0,
-      "moneda": "EUR"
-    },
-    {
       "archivo": "gastos/minuta-3.pdf",
       "tipo": "gasto",
       "numero": ":",
@@ -68,6 +52,22 @@
       "irpf_porcentaje": 0,
       "irpf_cantidad": 0,
       "total": 30.0,
+      "moneda": "EUR"
+    },
+    {
+      "archivo": "gastos/factura-1-000908.pdf",
+      "tipo": "gasto",
+      "numero": "factura-1-000908",
+      "fecha": "2025-11-24",
+      "emisor": "LA FE FORTES PARDO",
+      "receptor": "",
+      "concepto": "",
+      "base_imponible": 0.0,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 0.0,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0,
+      "total": 0.0,
       "moneda": "EUR"
     }
   ]
