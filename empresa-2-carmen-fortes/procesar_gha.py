@@ -185,7 +185,10 @@ def main():
     if procesados > 0:
         with open(JSON_PATH, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"\n{procesados} factura(s) procesada(s). Dashboard actualizado.")
+        # Validar que el JSON escrito es válido antes de salir
+        with open(JSON_PATH, 'r', encoding='utf-8') as f:
+            json.load(f)
+        print(f"\n{procesados} factura(s) procesada(s). JSON validado. Dashboard actualizado.")
 
 
 if __name__ == "__main__":

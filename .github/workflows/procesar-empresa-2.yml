@@ -30,6 +30,9 @@ jobs:
       - name: Procesar facturas nuevas
         run: python empresa-2-carmen-fortes/procesar_gha.py
 
+      - name: Validar JSON antes de subir
+        run: python -c "import json; json.load(open('empresa-2-carmen-fortes/facturas_datos.json')); print('JSON válido ✓')"
+
       - name: Subir cambios al repositorio
         run: |
           git config user.name "Dashboard Bot"
