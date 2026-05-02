@@ -1,5 +1,5 @@
 {
-  "fecha_generacion": "2026-05-01",
+  "fecha_generacion": "2026-05-02",
   "rango": "2025-10-01 a 2026-03-20",
   "emisor_propio": {
     "nombre": "Estudio Creativo Vega SL",
@@ -260,6 +260,22 @@
       "irpf_porcentaje": 0,
       "irpf_cantidad": 0,
       "total": 72.59,
+      "moneda": "EUR"
+    },
+    {
+      "archivo": "gastos/Minuta stro  01202400140907.pdf",
+      "tipo": "gasto",
+      "numero": "Minuta stro  01202400140907",
+      "fecha": "",
+      "emisor": "",
+      "receptor": "",
+      "concepto": "",
+      "base_imponible": 0.0,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 0.0,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0,
+      "total": 0.0,
       "moneda": "EUR"
     },
     {
