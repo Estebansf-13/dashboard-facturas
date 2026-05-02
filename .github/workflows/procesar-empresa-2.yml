@@ -21,15 +21,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Instalar poppler (necesario para convertir PDF a imagen)
-        run: sudo apt-get install -y poppler-utils
+      - name: Instalar Tesseract OCR y poppler
+        run: sudo apt-get install -y tesseract-ocr tesseract-ocr-spa poppler-utils
 
       - name: Instalar dependencias Python
-        run: pip install pdfplumber anthropic pdf2image pillow
+        run: pip install pdfplumber pdf2image pillow pytesseract
 
       - name: Procesar facturas nuevas
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python empresa-2-carmen-fortes/procesar_gha.py
 
       - name: Subir cambios al repositorio

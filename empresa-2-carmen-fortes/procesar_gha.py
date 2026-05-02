@@ -1,10 +1,10 @@
 """
 Procesa PDFs en facturas/nuevas/ — corre en GitHub Actions (nube).
-1. Intenta extraer texto con pdfplumber (PDFs digitales).
-2. Si no hay texto (PDF escaneado/foto), usa Claude Vision para leerlo visualmente.
+1. Intenta extraer texto con pdfplumber (PDFs digitales, rápido).
+2. Si no hay texto (PDF escaneado/foto), aplica OCR con Tesseract (gratis).
 """
 
-import re, json, time, shutil, os, io, base64
+import re, json, time, shutil
 from pathlib import Path
 
 try:
@@ -14,11 +14,11 @@ except ImportError:
     TIENE_PDFPLUMBER = False
 
 try:
-    import anthropic
+    import pytesseract
     from pdf2image import convert_from_path
-    TIENE_VISION = True
+    TIENE_OCR = True
 except ImportError:
-    TIENE_VISION = False
+    TIENE_OCR = False
 
 BASE_DIR = Path(__file__).parent
 NUEVAS_DIR = BASE_DIR / "facturas" / "nuevas"
@@ -40,67 +40,21 @@ def extraer_texto(filepath):
     return ' '.join(texto)
 
 
-def extraer_con_vision(filepath):
-    """Convierte el PDF a imágenes y usa Claude Vision para leer la factura."""
-    if not TIENE_VISION:
-        return None
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("  ANTHROPIC_API_KEY no configurada.")
-        return None
-
+def extraer_con_ocr(filepath):
+    """Convierte el PDF a imágenes y aplica OCR con Tesseract."""
+    if not TIENE_OCR:
+        return ''
     try:
-        images = convert_from_path(str(filepath), dpi=200, fmt='png')
-        content = []
+        images = convert_from_path(str(filepath), dpi=300, fmt='png')
+        textos = []
         for img in images[:3]:
-            buf = io.BytesIO()
-            img.save(buf, format='PNG')
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": base64.b64encode(buf.getvalue()).decode()
-                }
-            })
-        content.append({
-            "type": "text",
-            "text": (
-                "Analiza esta factura y devuelve ÚNICAMENTE un JSON con estos campos "
-                "(sin texto adicional, sin bloques markdown):\n"
-                "{\n"
-                '  "numero": "número de factura",\n'
-                '  "fecha": "YYYY-MM-DD",\n'
-                '  "emisor": "nombre completo del emisor o empresa proveedora",\n'
-                '  "receptor": "nombre completo del receptor o cliente",\n'
-                '  "concepto": "descripción principal del servicio o producto",\n'
-                '  "base_imponible": 0.00,\n'
-                '  "iva_porcentaje": 21,\n'
-                '  "iva_cantidad": 0.00,\n'
-                '  "irpf_porcentaje": 0,\n'
-                '  "irpf_cantidad": 0.00,\n'
-                '  "total": 0.00\n'
-                "}\n"
-                "Los importes deben ser números decimales con punto. "
-                "Si no hay IRPF, usa 0."
-            )
-        })
-
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": content}]
-        )
-
-        text = response.content[0].text.strip()
-        text = re.sub(r'^```[a-z]*\n?', '', text)
-        text = re.sub(r'\n?```$', '', text)
-        return json.loads(text.strip())
-
+            t = pytesseract.image_to_string(img, lang='spa+eng')
+            if t.strip():
+                textos.append(t)
+        return ' '.join(textos)
     except Exception as e:
-        print(f"  Error en visión: {e}")
-        return None
+        print(f"  Error en OCR: {e}")
+        return ''
 
 
 def parsear_importe(texto):
@@ -147,7 +101,7 @@ def extraer_datos(texto):
     if m:
         d["concepto"] = m.group(1).strip()
 
-    m = re.search(r'Base\s+imponible[\s:€]*([0-9.,]+)', texto, re.IGNORECASE)
+    m = re.search(r'Base\s+[Ii]mponible[\s:€]*([0-9.,]+)', texto, re.IGNORECASE)
     if m:
         d["base_imponible"] = parsear_importe(m.group(1))
 
@@ -177,30 +131,6 @@ def extraer_datos(texto):
     return d
 
 
-def datos_desde_vision(vision, pdf_name):
-    datos = {
-        "archivo": f"gastos/{pdf_name}",
-        "tipo": "gasto",
-        "numero": vision.get("numero") or Path(pdf_name).stem,
-        "fecha": vision.get("fecha", time.strftime("%Y-%m-%d")),
-        "emisor": vision.get("emisor", ""),
-        "receptor": vision.get("receptor", ""),
-        "concepto": vision.get("concepto", ""),
-        "base_imponible": float(vision.get("base_imponible", 0)),
-        "iva_porcentaje": int(vision.get("iva_porcentaje", 21)),
-        "iva_cantidad": float(vision.get("iva_cantidad", 0)),
-        "irpf_porcentaje": int(vision.get("irpf_porcentaje", 0)),
-        "irpf_cantidad": float(vision.get("irpf_cantidad", 0)),
-        "total": float(vision.get("total", 0)),
-        "moneda": "EUR"
-    }
-    if EMISOR_PROPIO.lower() in datos["emisor"].lower():
-        datos["tipo"] = "ingreso"
-    elif EMISOR_PROPIO.lower() in datos["receptor"].lower():
-        datos["tipo"] = "gasto"
-    return datos
-
-
 def main():
     NUEVAS_DIR.mkdir(parents=True, exist_ok=True)
     INGRESOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -220,25 +150,26 @@ def main():
         texto = extraer_texto(str(pdf))
 
         if not texto.strip():
-            print("  PDF sin texto extraíble. Usando Claude Vision...")
-            vision = extraer_con_vision(str(pdf))
-            if vision:
-                datos = datos_desde_vision(vision, pdf.name)
-                print(f"  Visión OK — Total: {datos['total']} EUR")
+            print("  PDF sin texto. Aplicando OCR con Tesseract...")
+            texto = extraer_con_ocr(str(pdf))
+            if texto.strip():
+                print("  OCR completado.")
             else:
-                print("  Visión no disponible. Guardando sin datos.")
-                datos = {
-                    "archivo": f"gastos/{pdf.name}", "tipo": "gasto",
-                    "numero": pdf.stem, "fecha": time.strftime("%Y-%m-%d"),
-                    "emisor": "", "receptor": "",
-                    "concepto": f"PDF sin texto: {pdf.name}",
-                    "base_imponible": 0.0, "iva_porcentaje": 21,
-                    "iva_cantidad": 0.0, "irpf_porcentaje": 0,
-                    "irpf_cantidad": 0, "total": 0.0, "moneda": "EUR"
-                }
-        else:
+                print("  OCR sin resultado. Guardando sin datos.")
+
+        if texto.strip():
             datos = extraer_datos(texto)
             datos["numero"] = datos["numero"] or pdf.stem
+        else:
+            datos = {
+                "archivo": f"gastos/{pdf.name}", "tipo": "gasto",
+                "numero": pdf.stem, "fecha": time.strftime("%Y-%m-%d"),
+                "emisor": "", "receptor": "",
+                "concepto": f"PDF sin texto: {pdf.name}",
+                "base_imponible": 0.0, "iva_porcentaje": 21,
+                "iva_cantidad": 0.0, "irpf_porcentaje": 0,
+                "irpf_cantidad": 0, "total": 0.0, "moneda": "EUR"
+            }
 
         dest_dir = INGRESOS_DIR if datos["tipo"] == "ingreso" else GASTOS_DIR
         datos["archivo"] = f"{'ingresos' if datos['tipo'] == 'ingreso' else 'gastos'}/{pdf.name}"
