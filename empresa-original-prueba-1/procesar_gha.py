@@ -1,9 +1,13 @@
 """
 Procesa PDFs en facturas/nuevas/ — corre en GitHub Actions (nube).
-Usa pdfplumber para extraer texto de forma fiable.
+
+Cascada de métodos (cada uno solo se usa si el anterior no encuentra el total):
+1. pdfplumber   — PDFs digitales con texto, rápido y fiable
+2. Tesseract    — PDFs escaneados con buena calidad
+3. Gemini Vision — fotos, escaneados difíciles, cualquier documento (GRATIS)
 """
 
-import re, json, time, shutil
+import re, json, time, shutil, os
 from pathlib import Path
 
 try:
@@ -12,6 +16,20 @@ try:
 except ImportError:
     TIENE_PDFPLUMBER = False
 
+try:
+    import pytesseract
+    from pdf2image import convert_from_path
+    from PIL import ImageEnhance
+    TIENE_OCR = True
+except ImportError:
+    TIENE_OCR = False
+
+try:
+    import google.generativeai as genai
+    TIENE_GEMINI = True
+except ImportError:
+    TIENE_GEMINI = False
+
 BASE_DIR = Path(__file__).parent
 NUEVAS_DIR = BASE_DIR / "facturas" / "nuevas"
 INGRESOS_DIR = BASE_DIR / "facturas" / "ingresos"
@@ -19,17 +37,75 @@ GASTOS_DIR = BASE_DIR / "facturas" / "gastos"
 JSON_PATH = BASE_DIR / "facturas_datos.json"
 EMISOR_PROPIO = "Estudio Creativo Vega SL"
 
+PROMPT_VISION = (
+    "Analiza esta factura y devuelve ÚNICAMENTE un JSON con estos campos "
+    "(sin texto adicional, sin bloques markdown):\n"
+    "{\n"
+    '  "numero": "número de factura",\n'
+    '  "fecha": "YYYY-MM-DD",\n'
+    '  "emisor": "nombre completo de quien emite la factura (el proveedor)",\n'
+    '  "receptor": "nombre completo de quien recibe la factura (el cliente)",\n'
+    '  "concepto": "descripción del servicio o producto",\n'
+    '  "base_imponible": 0.00,\n'
+    '  "iva_porcentaje": 21,\n'
+    '  "iva_cantidad": 0.00,\n'
+    '  "irpf_porcentaje": 0,\n'
+    '  "irpf_cantidad": 0.00,\n'
+    '  "total": 0.00\n'
+    "}\n"
+    "Los importes deben ser números decimales con punto. Si no hay IRPF usa 0."
+)
+
 
 def extraer_texto(filepath):
-    if TIENE_PDFPLUMBER:
-        texto = []
-        with pdfplumber.open(filepath) as pdf:
-            for page in pdf.pages:
-                t = page.extract_text()
-                if t:
-                    texto.append(t)
-        return ' '.join(texto)
-    return ''
+    if not TIENE_PDFPLUMBER:
+        return ''
+    texto = []
+    with pdfplumber.open(filepath) as pdf:
+        for page in pdf.pages:
+            t = page.extract_text()
+            if t:
+                texto.append(t)
+    return ' '.join(texto)
+
+
+def extraer_con_ocr(filepath):
+    if not TIENE_OCR:
+        return ''
+    try:
+        images = convert_from_path(str(filepath), dpi=300, fmt='png')
+        textos = []
+        for img in images[:3]:
+            img = ImageEnhance.Contrast(img.convert('L')).enhance(2.0)
+            t = pytesseract.image_to_string(img, lang='spa+eng', config='--psm 6')
+            if t.strip():
+                textos.append(t)
+        return ' '.join(textos)
+    except Exception as e:
+        print(f"  Error en OCR: {e}")
+        return ''
+
+
+def extraer_con_gemini(filepath):
+    if not TIENE_GEMINI:
+        return None
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("  GEMINI_API_KEY no configurada — saltando visión.")
+        return None
+    try:
+        from pdf2image import convert_from_path
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        images = convert_from_path(str(filepath), dpi=200, fmt='png')
+        response = model.generate_content(list(images[:3]) + [PROMPT_VISION])
+        text = response.text.strip()
+        text = re.sub(r'^```[a-z]*\n?', '', text)
+        text = re.sub(r'\n?```$', '', text)
+        return json.loads(text.strip())
+    except Exception as e:
+        print(f"  Error en Gemini: {e}")
+        return None
 
 
 def parsear_importe(texto):
@@ -42,7 +118,7 @@ def parsear_importe(texto):
         return 0.0
 
 
-def extraer_datos(texto, filename):
+def extraer_datos(texto):
     d = {
         "archivo": "", "tipo": "gasto", "numero": "", "fecha": "",
         "emisor": "", "receptor": "", "concepto": "",
@@ -60,13 +136,15 @@ def extraer_datos(texto, filename):
     if m:
         d["fecha"] = f"{m.group(3)}-{m.group(2).zfill(2)}-{m.group(1).zfill(2)}"
 
-    for pat in [r'(?:Emisor|Proveedor|De|Empresa)[\s:]+([^\n]+)', r'^([A-ZÁÉÍÓÚÑ][^\n]{3,40}(?:SL|SA|SAU|SLU|Ltd))', ]:
+    for pat in [r'(?:Emisor|Proveedor|De|Empresa)[\s:]+([^\n]+)',
+                r'^([A-ZÁÉÍÓÚÑ][^\n]{3,40}(?:SL|SA|SAU|SLU|Ltd))']:
         m = re.search(pat, texto, re.IGNORECASE | re.MULTILINE)
         if m:
             d["emisor"] = m.group(1).strip()
             break
 
-    for pat in [r'(?:Cliente|Facturar a|Receptor|Para)[\s:]+([^\n]+)', r'(?:CIF|NIF)[\s:/]+[A-Z0-9\-]+\s+([^\n]+)']:
+    for pat in [r'(?:Cliente|Facturar a|Receptor|Para)[\s:]+([^\n]+)',
+                r'(?:CIF|NIF)[\s:/]+[A-Z0-9\-]+\s+([^\n]+)']:
         m = re.search(pat, texto, re.IGNORECASE)
         if m:
             d["receptor"] = m.group(1).strip()
@@ -76,7 +154,7 @@ def extraer_datos(texto, filename):
     if m:
         d["concepto"] = m.group(1).strip()
 
-    m = re.search(r'Base\s+imponible[\s:€]*([0-9.,]+)', texto, re.IGNORECASE)
+    m = re.search(r'Base\s+[Ii]mponible[\s:€]*([0-9.,]+)', texto, re.IGNORECASE)
     if m:
         d["base_imponible"] = parsear_importe(m.group(1))
 
@@ -94,18 +172,40 @@ def extraer_datos(texto, filename):
     if m:
         d["total"] = parsear_importe(m.group(1))
 
-    # Si base y total están vacíos, intentar calcular
     if d["base_imponible"] == 0 and d["total"] > 0:
         d["base_imponible"] = round(d["total"] / 1.21, 2)
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
 
-    # Clasificar ingreso o gasto
     if EMISOR_PROPIO.lower() in d["emisor"].lower():
         d["tipo"] = "ingreso"
     elif EMISOR_PROPIO.lower() in d["receptor"].lower():
         d["tipo"] = "gasto"
 
     return d
+
+
+def datos_desde_vision(vision, pdf_name):
+    datos = {
+        "archivo": f"gastos/{pdf_name}",
+        "tipo": "gasto",
+        "numero": str(vision.get("numero") or Path(pdf_name).stem),
+        "fecha": vision.get("fecha") or time.strftime("%Y-%m-%d"),
+        "emisor": vision.get("emisor", ""),
+        "receptor": vision.get("receptor", ""),
+        "concepto": vision.get("concepto", ""),
+        "base_imponible": float(vision.get("base_imponible") or 0),
+        "iva_porcentaje": int(vision.get("iva_porcentaje") or 21),
+        "iva_cantidad": float(vision.get("iva_cantidad") or 0),
+        "irpf_porcentaje": int(vision.get("irpf_porcentaje") or 0),
+        "irpf_cantidad": float(vision.get("irpf_cantidad") or 0),
+        "total": float(vision.get("total") or 0),
+        "moneda": "EUR"
+    }
+    if EMISOR_PROPIO.lower() in datos["emisor"].lower():
+        datos["tipo"] = "ingreso"
+    elif EMISOR_PROPIO.lower() in datos["receptor"].lower():
+        datos["tipo"] = "gasto"
+    return datos
 
 
 def main():
@@ -124,35 +224,66 @@ def main():
     procesados = 0
     for pdf in pdfs:
         print(f"\nProcesando: {pdf.name}")
-        texto = extraer_texto(str(pdf))
+        datos = None
 
-        if not texto.strip():
-            print(f"  Sin texto extraible (PDF escaneado o imagen). Moviendo a gastos sin datos.")
-            datos = {"archivo": f"gastos/{pdf.name}", "tipo": "gasto", "numero": pdf.stem,
-                     "fecha": time.strftime("%Y-%m-%d"), "emisor": "", "receptor": "",
-                     "concepto": f"PDF sin texto: {pdf.name}", "base_imponible": 0.0,
-                     "iva_porcentaje": 21, "iva_cantidad": 0.0, "irpf_porcentaje": 0,
-                     "irpf_cantidad": 0, "total": 0.0, "moneda": "EUR"}
-        else:
-            datos = extraer_datos(texto, pdf.name)
+        # Paso 1: pdfplumber
+        texto = extraer_texto(str(pdf))
+        if texto.strip():
+            datos = extraer_datos(texto)
             datos["numero"] = datos["numero"] or pdf.stem
+            if datos["total"] > 0:
+                print(f"  pdfplumber OK — Total: {datos['total']} EUR")
+
+        # Paso 2: Tesseract
+        if not datos or datos["total"] == 0:
+            print("  Total 0 o sin texto. Aplicando Tesseract OCR...")
+            texto_ocr = extraer_con_ocr(str(pdf))
+            if texto_ocr.strip():
+                datos_ocr = extraer_datos(texto_ocr)
+                datos_ocr["numero"] = datos_ocr["numero"] or pdf.stem
+                if datos_ocr["total"] > 0:
+                    datos = datos_ocr
+                    print(f"  Tesseract OK — Total: {datos['total']} EUR")
+
+        # Paso 3: Gemini Vision
+        if not datos or datos["total"] == 0:
+            print("  Tesseract sin resultado. Usando Gemini Vision...")
+            vision = extraer_con_gemini(str(pdf))
+            if vision:
+                datos = datos_desde_vision(vision, pdf.name)
+                print(f"  Gemini OK — Total: {datos['total']} EUR")
+
+        # Fallback
+        if not datos or datos["total"] == 0:
+            print("  Ningún método encontró el total. Guardando sin datos.")
+            if not datos:
+                datos = {
+                    "archivo": f"gastos/{pdf.name}", "tipo": "gasto",
+                    "numero": pdf.stem, "fecha": time.strftime("%Y-%m-%d"),
+                    "emisor": "", "receptor": "",
+                    "concepto": f"Revisar manualmente: {pdf.name}",
+                    "base_imponible": 0.0, "iva_porcentaje": 21,
+                    "iva_cantidad": 0.0, "irpf_porcentaje": 0,
+                    "irpf_cantidad": 0, "total": 0.0, "moneda": "EUR"
+                }
 
         dest_dir = INGRESOS_DIR if datos["tipo"] == "ingreso" else GASTOS_DIR
         datos["archivo"] = f"{'ingresos' if datos['tipo'] == 'ingreso' else 'gastos'}/{pdf.name}"
 
-        # Reemplazar si ya existe
-        data["facturas"] = [f for f in data["facturas"] if f["numero"] != datos["numero"]]
+        data["facturas"] = [f for f in data["facturas"] if f.get("numero") != datos["numero"]]
         data["facturas"].append(datos)
         data["fecha_generacion"] = time.strftime("%Y-%m-%d")
 
         shutil.move(str(pdf), str(dest_dir / pdf.name))
-        print(f"  Tipo: {datos['tipo']} | Total: {datos['total']}€ | Movido a {dest_dir.name}/")
+        print(f"  Tipo: {datos['tipo']} | Total: {datos['total']} EUR | → {dest_dir.name}/")
         procesados += 1
 
     if procesados > 0:
         with open(JSON_PATH, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"\n✓ {procesados} factura(s) procesada(s). Dashboard actualizado.")
+        with open(JSON_PATH, 'r', encoding='utf-8') as f:
+            json.load(f)
+        print(f"\n{procesados} factura(s) procesada(s). JSON validado. Dashboard actualizado.")
 
 
 if __name__ == "__main__":

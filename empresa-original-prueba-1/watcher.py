@@ -332,13 +332,20 @@ class NuevaFacturaHandler(FileSystemEventHandler):
 
 
 def main():
-    # Crear carpetas si no existen
     NUEVAS_DIR.mkdir(parents=True, exist_ok=True)
     INGRESOS_DIR.mkdir(parents=True, exist_ok=True)
     GASTOS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
-    print("🔍 WATCHER DE FACTURAS — Modo automático")
+    print("Sincronizando con GitHub...")
+    try:
+        subprocess.run(['git', 'pull', 'origin', 'main'], cwd=BASE_DIR.parent, check=True, capture_output=True)
+        print("Archivos actualizados.")
+    except Exception:
+        print("(Sin conexion o ya al dia)")
+
+    print("=" * 60)
+    print("WATCHER DE FACTURAS — Modo automatico")
     print("=" * 60)
     print(f"📂 Vigilando: {NUEVAS_DIR}")
     print(f"📊 JSON:      {JSON_PATH}")

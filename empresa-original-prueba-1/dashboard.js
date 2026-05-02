@@ -27,15 +27,33 @@ function trimestre(fecha) {
 async function cargarDatos() {
   try {
     const r = await fetch('facturas_datos.json?t=' + Date.now());
+    if (!r.ok) throw new Error(`No se pudo cargar el archivo de datos (HTTP ${r.status})`);
     const text = await r.text();
-    if (text === lastJSON) return; // Sin cambios
+    if (text === lastJSON) return;
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      throw new Error('El archivo de datos está dañado. Contacta con soporte.');
+    }
     lastJSON = text;
-    const data = JSON.parse(text);
+    ocultarError();
     renderDashboard(data);
     mostrarRecarga();
   } catch (e) {
+    mostrarError(e.message);
     console.error('Error cargando datos:', e);
   }
+}
+
+function mostrarError(msg) {
+  const el = document.getElementById('d-empresa');
+  if (el) { el.textContent = '⚠ ' + msg; el.style.color = '#ff6b6b'; }
+}
+
+function ocultarError() {
+  const el = document.getElementById('d-empresa');
+  if (el) { el.style.color = ''; }
 }
 
 function mostrarRecarga() {

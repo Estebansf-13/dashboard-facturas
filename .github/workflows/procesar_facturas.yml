@@ -1,4 +1,4 @@
-name: Procesar Facturas — Empresa 1 (pdfplumber)
+name: Procesar Facturas — Empresa 1 (pdfplumber + OCR + Gemini)
 
 on:
   push:
@@ -21,11 +21,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Instalar dependencias
-        run: pip install pdfplumber
+      - name: Instalar Tesseract OCR y poppler
+        run: sudo apt-get install -y tesseract-ocr tesseract-ocr-spa poppler-utils
+
+      - name: Instalar dependencias Python
+        run: pip install pdfplumber pdf2image pillow pytesseract google-generativeai
 
       - name: Procesar facturas nuevas
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python empresa-original-prueba-1/procesar_gha.py
+
+      - name: Validar JSON antes de subir
+        run: python -c "import json; json.load(open('empresa-original-prueba-1/facturas_datos.json')); print('JSON válido ✓')"
 
       - name: Subir cambios al repositorio
         run: |
