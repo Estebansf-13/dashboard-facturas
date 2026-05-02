@@ -1,9 +1,9 @@
-name: Procesar factura nueva
+name: Procesar factura nueva — Empresa 1
 
 on:
   push:
     paths:
-      - 'facturas/nuevas/**'
+      - 'empresa-original-prueba-1/facturas/nuevas/**'
 
 permissions:
   contents: write
@@ -23,14 +23,14 @@ jobs:
           python-version: '3.11'
 
       - name: Procesar facturas
-        run: python procesar.py
+        run: python empresa-original-prueba-1/procesar.py
 
       - name: Guardar cambios en GitHub
         run: |
           git config user.name "Dashboard Bot"
           git config user.email "bot@dashboard-facturas.com"
-          git add facturas_datos.json
-          git rm --cached "facturas/nuevas/"*.pdf "facturas/nuevas/"*.PDF 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "Factura procesada automáticamente"
+          git add empresa-original-prueba-1/facturas_datos.json
+          git rm --cached "empresa-original-prueba-1/facturas/nuevas/"*.pdf "empresa-original-prueba-1/facturas/nuevas/"*.PDF 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "Empresa 1: factura procesada automáticamente"
           git pull --rebase origin main
           git push

@@ -170,7 +170,7 @@ async function subir() {
 
   try {
     const base64 = await toBase64(archivoActual);
-    const path = `facturas/nuevas/${archivoActual.name}`;
+    const path = `empresa-original-prueba-1/facturas/nuevas/${archivoActual.name}`;
     const url = `https://api.github.com/repos/${getRepo()}/contents/${path}`;
 
     let sha = null;

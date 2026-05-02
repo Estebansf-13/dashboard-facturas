@@ -229,12 +229,13 @@ def extraer_datos_factura(texto: str, filename: str) -> dict:
 def publicar_en_github(numero: str):
     """Sube el JSON actualizado a GitHub para que el dashboard online se refresque."""
     try:
-        subprocess.run(['git', 'add', 'facturas_datos.json'], cwd=BASE_DIR, check=True)
-        subprocess.run(['git', 'commit', '-m', f'Factura {numero} añadida'], cwd=BASE_DIR, check=True)
-        subprocess.run(['git', 'push'], cwd=BASE_DIR, check=True)
-        print(f"  🌐 Dashboard online actualizado: https://estebansf-13.github.io/dashboard-facturas/dashboard-facturacion.html")
+        rel_json = JSON_PATH.relative_to(BASE_DIR.parent)
+        subprocess.run(['git', 'add', str(rel_json)], cwd=BASE_DIR.parent, check=True)
+        subprocess.run(['git', 'commit', '-m', f'Empresa 1: factura {numero} añadida'], cwd=BASE_DIR.parent, check=True)
+        subprocess.run(['git', 'push'], cwd=BASE_DIR.parent, check=True)
+        print(f"  Dashboard online actualizado: https://estebansf-13.github.io/dashboard-facturas/empresa-original-prueba-1/dashboard-facturacion.html")
     except Exception as e:
-        print(f"  ⚠ No se pudo subir a GitHub: {e}")
+        print(f"  No se pudo subir a GitHub: {e}")
 
 
 def actualizar_json(datos_factura: dict):

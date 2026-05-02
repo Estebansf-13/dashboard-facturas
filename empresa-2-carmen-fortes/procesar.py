@@ -12,7 +12,8 @@ INGRESOS_DIR = BASE_DIR / "facturas" / "ingresos"
 GASTOS_DIR = BASE_DIR / "facturas" / "gastos"
 JSON_PATH = BASE_DIR / "facturas_datos.json"
 LOG_PATH = BASE_DIR / "procesar.log"
-EMISOR_PROPIO = "Estudio Creativo Vega SL"
+EMISOR_PROPIO = "Carmen Fortes Pardo"
+
 
 
 def log(msg):
@@ -151,7 +152,7 @@ def main():
             data["facturas"].append(datos)
             data["fecha_generacion"] = time.strftime("%Y-%m-%d")
             shutil.move(str(pdf), str(dest_dir / pdf.name))
-            log(f"  Procesado: {pdf.name} → {datos['tipo']} {datos['total']}€")
+            log(f"  Procesado: {pdf.name} → {datos['tipo']} {datos['total']}EUR")
             procesados += 1
         except Exception as e:
             log(f"  Error en {pdf.name}: {e}")
@@ -162,15 +163,11 @@ def main():
     with open(JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-    # Si corre en GitHub Actions el workflow se encarga del push
-    if os.environ.get('GITHUB_ACTIONS'):
-        log(f"  JSON actualizado — el workflow de GitHub hará el commit")
-        return
-
     try:
-        subprocess.run(['git', 'add', 'facturas_datos.json'], cwd=BASE_DIR, check=True)
-        subprocess.run(['git', 'commit', '-m', f'{procesados} factura(s) nueva(s)'], cwd=BASE_DIR, check=True)
-        subprocess.run(['git', 'push'], cwd=BASE_DIR, check=True)
+        rel_json = JSON_PATH.relative_to(BASE_DIR.parent)
+        subprocess.run(['git', 'add', str(rel_json)], cwd=BASE_DIR.parent, check=True)
+        subprocess.run(['git', 'commit', '-m', f'Carmen Fortes: {procesados} factura(s) nueva(s)'], cwd=BASE_DIR.parent, check=True)
+        subprocess.run(['git', 'push'], cwd=BASE_DIR.parent, check=True)
         log(f"  Dashboard online actualizado")
     except Exception as e:
         log(f"  Error al subir a GitHub: {e}")

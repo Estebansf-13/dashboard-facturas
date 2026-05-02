@@ -1,10 +1,10 @@
 @echo off
-title Dashboard de Facturas — Activo
+title [1] Empresa Original Prueba 1 — Dashboard Activo
 chcp 65001 >nul
 cd /d "%~dp0"
 
 echo ============================================================
-echo   DASHBOARD DE FACTURAS
+echo   [EMPRESA 1] EMPRESA ORIGINAL PRUEBA 1
 echo ============================================================
 echo.
 echo  Arrancando servidor web local en puerto 8888...
@@ -17,7 +17,7 @@ start "" http://localhost:8888/dashboard-facturacion.html
 
 echo.
 echo ============================================================
-echo  VIGILANTE DE FACTURAS ACTIVO
+echo  VIGILANTE DE FACTURAS ACTIVO — EMPRESA 1
 echo ============================================================
 echo.
 echo  Carpeta vigilada: facturas\nuevas\
