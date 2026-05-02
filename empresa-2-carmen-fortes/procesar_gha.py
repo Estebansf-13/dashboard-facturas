@@ -1,9 +1,10 @@
 """
 Procesa PDFs en facturas/nuevas/ — corre en GitHub Actions (nube).
-Usa pdfplumber para extraer texto de forma fiable.
+1. Intenta extraer texto con pdfplumber (PDFs digitales).
+2. Si no hay texto (PDF escaneado/foto), usa Claude Vision para leerlo visualmente.
 """
 
-import re, json, time, shutil
+import re, json, time, shutil, os, io, base64
 from pathlib import Path
 
 try:
@@ -11,6 +12,13 @@ try:
     TIENE_PDFPLUMBER = True
 except ImportError:
     TIENE_PDFPLUMBER = False
+
+try:
+    import anthropic
+    from pdf2image import convert_from_path
+    TIENE_VISION = True
+except ImportError:
+    TIENE_VISION = False
 
 BASE_DIR = Path(__file__).parent
 NUEVAS_DIR = BASE_DIR / "facturas" / "nuevas"
@@ -21,15 +29,78 @@ EMISOR_PROPIO = "Carmen Fortes Pardo"
 
 
 def extraer_texto(filepath):
-    if TIENE_PDFPLUMBER:
-        texto = []
-        with pdfplumber.open(filepath) as pdf:
-            for page in pdf.pages:
-                t = page.extract_text()
-                if t:
-                    texto.append(t)
-        return ' '.join(texto)
-    return ''
+    if not TIENE_PDFPLUMBER:
+        return ''
+    texto = []
+    with pdfplumber.open(filepath) as pdf:
+        for page in pdf.pages:
+            t = page.extract_text()
+            if t:
+                texto.append(t)
+    return ' '.join(texto)
+
+
+def extraer_con_vision(filepath):
+    """Convierte el PDF a imágenes y usa Claude Vision para leer la factura."""
+    if not TIENE_VISION:
+        return None
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("  ANTHROPIC_API_KEY no configurada.")
+        return None
+
+    try:
+        images = convert_from_path(str(filepath), dpi=200, fmt='png')
+        content = []
+        for img in images[:3]:
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": base64.b64encode(buf.getvalue()).decode()
+                }
+            })
+        content.append({
+            "type": "text",
+            "text": (
+                "Analiza esta factura y devuelve ÚNICAMENTE un JSON con estos campos "
+                "(sin texto adicional, sin bloques markdown):\n"
+                "{\n"
+                '  "numero": "número de factura",\n'
+                '  "fecha": "YYYY-MM-DD",\n'
+                '  "emisor": "nombre completo del emisor o empresa proveedora",\n'
+                '  "receptor": "nombre completo del receptor o cliente",\n'
+                '  "concepto": "descripción principal del servicio o producto",\n'
+                '  "base_imponible": 0.00,\n'
+                '  "iva_porcentaje": 21,\n'
+                '  "iva_cantidad": 0.00,\n'
+                '  "irpf_porcentaje": 0,\n'
+                '  "irpf_cantidad": 0.00,\n'
+                '  "total": 0.00\n'
+                "}\n"
+                "Los importes deben ser números decimales con punto. "
+                "Si no hay IRPF, usa 0."
+            )
+        })
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": content}]
+        )
+
+        text = response.content[0].text.strip()
+        text = re.sub(r'^```[a-z]*\n?', '', text)
+        text = re.sub(r'\n?```$', '', text)
+        return json.loads(text.strip())
+
+    except Exception as e:
+        print(f"  Error en visión: {e}")
+        return None
 
 
 def parsear_importe(texto):
@@ -42,7 +113,7 @@ def parsear_importe(texto):
         return 0.0
 
 
-def extraer_datos(texto, filename):
+def extraer_datos(texto):
     d = {
         "archivo": "", "tipo": "gasto", "numero": "", "fecha": "",
         "emisor": "", "receptor": "", "concepto": "",
@@ -106,6 +177,30 @@ def extraer_datos(texto, filename):
     return d
 
 
+def datos_desde_vision(vision, pdf_name):
+    datos = {
+        "archivo": f"gastos/{pdf_name}",
+        "tipo": "gasto",
+        "numero": vision.get("numero") or Path(pdf_name).stem,
+        "fecha": vision.get("fecha", time.strftime("%Y-%m-%d")),
+        "emisor": vision.get("emisor", ""),
+        "receptor": vision.get("receptor", ""),
+        "concepto": vision.get("concepto", ""),
+        "base_imponible": float(vision.get("base_imponible", 0)),
+        "iva_porcentaje": int(vision.get("iva_porcentaje", 21)),
+        "iva_cantidad": float(vision.get("iva_cantidad", 0)),
+        "irpf_porcentaje": int(vision.get("irpf_porcentaje", 0)),
+        "irpf_cantidad": float(vision.get("irpf_cantidad", 0)),
+        "total": float(vision.get("total", 0)),
+        "moneda": "EUR"
+    }
+    if EMISOR_PROPIO.lower() in datos["emisor"].lower():
+        datos["tipo"] = "ingreso"
+    elif EMISOR_PROPIO.lower() in datos["receptor"].lower():
+        datos["tipo"] = "gasto"
+    return datos
+
+
 def main():
     NUEVAS_DIR.mkdir(parents=True, exist_ok=True)
     INGRESOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -125,14 +220,24 @@ def main():
         texto = extraer_texto(str(pdf))
 
         if not texto.strip():
-            print(f"  Sin texto extraible. Moviendo a gastos sin datos.")
-            datos = {"archivo": f"gastos/{pdf.name}", "tipo": "gasto", "numero": pdf.stem,
-                     "fecha": time.strftime("%Y-%m-%d"), "emisor": "", "receptor": "",
-                     "concepto": f"PDF sin texto: {pdf.name}", "base_imponible": 0.0,
-                     "iva_porcentaje": 21, "iva_cantidad": 0.0, "irpf_porcentaje": 0,
-                     "irpf_cantidad": 0, "total": 0.0, "moneda": "EUR"}
+            print("  PDF sin texto extraíble. Usando Claude Vision...")
+            vision = extraer_con_vision(str(pdf))
+            if vision:
+                datos = datos_desde_vision(vision, pdf.name)
+                print(f"  Visión OK — Total: {datos['total']} EUR")
+            else:
+                print("  Visión no disponible. Guardando sin datos.")
+                datos = {
+                    "archivo": f"gastos/{pdf.name}", "tipo": "gasto",
+                    "numero": pdf.stem, "fecha": time.strftime("%Y-%m-%d"),
+                    "emisor": "", "receptor": "",
+                    "concepto": f"PDF sin texto: {pdf.name}",
+                    "base_imponible": 0.0, "iva_porcentaje": 21,
+                    "iva_cantidad": 0.0, "irpf_porcentaje": 0,
+                    "irpf_cantidad": 0, "total": 0.0, "moneda": "EUR"
+                }
         else:
-            datos = extraer_datos(texto, pdf.name)
+            datos = extraer_datos(texto)
             datos["numero"] = datos["numero"] or pdf.stem
 
         dest_dir = INGRESOS_DIR if datos["tipo"] == "ingreso" else GASTOS_DIR
