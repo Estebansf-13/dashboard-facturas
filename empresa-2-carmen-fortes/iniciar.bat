@@ -7,13 +7,11 @@ echo ============================================================
 echo   [EMPRESA 2] CARMEN FORTES PARDO
 echo ============================================================
 echo.
-echo  Arrancando servidor web local en puerto 8889...
-start /min "" python -m http.server 8889
-
-timeout /t 2 /nobreak >nul
-
-echo  Abriendo dashboard en el navegador...
-start "" http://localhost:8889/dashboard-facturacion.html
+echo  Sincronizando archivos con la nube...
+git -C "%~dp0\.." pull origin main
+echo.
+echo  Abriendo dashboard online...
+start "" "https://estebansf-13.github.io/dashboard-facturas/empresa-2-carmen-fortes/dashboard-facturacion.html"
 
 echo.
 echo ============================================================
@@ -24,7 +22,8 @@ echo  Carpeta vigilada: facturas\nuevas\
 echo.
 echo  Para procesar una factura:
 echo    1. Copia el PDF dentro de  facturas\nuevas\
-echo    2. El dashboard se actualiza solo en el navegador
+echo    2. Se sube automaticamente a la nube
+echo    3. El dashboard online se actualiza en 1-2 minutos
 echo.
 echo  Deja esta ventana ABIERTA mientras trabajes.
 echo  Para parar: cierra esta ventana o pulsa Ctrl+C

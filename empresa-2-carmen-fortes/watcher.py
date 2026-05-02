@@ -301,7 +301,15 @@ def main():
     GASTOS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
-    print("WATCHER DE FACTURAS — Cliente Prueba")
+    print("Sincronizando con GitHub...")
+    try:
+        subprocess.run(['git', 'pull', 'origin', 'main'], cwd=BASE_DIR.parent, check=True, capture_output=True)
+        print("Archivos actualizados.")
+    except Exception:
+        print("(Sin conexion o ya al dia)")
+
+    print("=" * 60)
+    print("WATCHER DE FACTURAS — Carmen Fortes Pardo")
     print("=" * 60)
     print(f"Vigilando: {NUEVAS_DIR}")
     print(f"JSON:      {JSON_PATH}")
