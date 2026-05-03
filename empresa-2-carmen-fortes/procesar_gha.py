@@ -41,6 +41,7 @@ INGRESOS_DIR = BASE_DIR / "facturas" / "ingresos"
 GASTOS_DIR = BASE_DIR / "facturas" / "gastos"
 JSON_PATH = BASE_DIR / "facturas_datos.json"
 EMISOR_PROPIO = "Carmen Fortes Pardo"
+NIF_PROPIO = "22972441"  # NIF sin letra para comparar flexible
 
 EXTENSIONES_IMAGEN = {'.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.bmp', '.tiff', '.tif'}
 EXTENSIONES_PDF = {'.pdf'}
@@ -51,8 +52,8 @@ Devuelve ÚNICAMENTE un JSON válido (sin texto adicional, sin bloques markdown 
 {
   "numero": "número de factura o albarán (string)",
   "fecha": "YYYY-MM-DD",
-  "emisor": "nombre completo de quien emite la factura (el vendedor/proveedor)",
-  "receptor": "nombre completo de quien recibe la factura (el comprador/cliente)",
+  "emisor": "nombre completo de quien EMITE la factura (el vendedor/proveedor, el que cobra)",
+  "receptor": "nombre completo de quien RECIBE la factura (el comprador/cliente, el que paga)",
   "concepto": "descripción breve del servicio o producto principal",
   "base_imponible": 0.00,
   "iva_porcentaje": 21,
@@ -62,7 +63,12 @@ Devuelve ÚNICAMENTE un JSON válido (sin texto adicional, sin bloques markdown 
   "total": 0.00
 }
 
-Reglas:
+Reglas IMPORTANTES para identificar emisor y receptor en facturas españolas:
+- EMISOR = quien aparece en la CABECERA/ENCABEZADO de la factura (arriba, con sus datos fiscales, NIF, logo). Es quien VENDE o presta el servicio.
+- RECEPTOR = quien aparece como CLIENTE o DESTINATARIO de la factura (sección "Datos del cliente", "Facturar a", "Cliente:"). Es quien PAGA.
+- Si aparece "Carmen Fortes Pardo" con NIF 22972441H en la CABECERA → es el EMISOR.
+- Si aparece "Carmen Fortes Pardo" en la sección de CLIENTE → es el RECEPTOR.
+- Si la factura es una MINUTA DE HONORARIOS de Carmen Fortes Pardo → ella es el EMISOR.
 - Los importes son números decimales con PUNTO (no coma): 430.51, no 430,51
 - Si no hay IRPF, usa 0
 - El total es el importe final a pagar (incluyendo IVA, menos IRPF si lo hay)
@@ -292,17 +298,28 @@ def extraer_datos_texto(texto):
 
 # ── Construcción del registro final ──────────────────────────────────────────
 
+def _es_propio(texto):
+    """True si el texto contiene el nombre o NIF de Carmen Fortes Pardo."""
+    t = texto.lower()
+    return EMISOR_PROPIO.lower() in t or NIF_PROPIO in t
+
 def construir_registro(datos_brutos, nombre_archivo):
     emisor = str(datos_brutos.get("emisor") or "").strip()
     receptor = str(datos_brutos.get("receptor") or "").strip()
-    nombre_lower = EMISOR_PROPIO.lower()
 
-    if nombre_lower in emisor.lower() and len(emisor) < 60:
+    # ingreso si Carmen es la emisora; gasto si es la receptora o si no se detecta
+    if _es_propio(emisor) and not _es_propio(receptor):
         tipo = "ingreso"
-    elif nombre_lower in receptor.lower():
+    elif _es_propio(receptor) and not _es_propio(emisor):
         tipo = "gasto"
+    elif _es_propio(emisor) and _es_propio(receptor):
+        # ambos son Carmen (raro) — tratar como ingreso
+        tipo = "ingreso"
     else:
-        tipo = "gasto"
+        tipo = "gasto"  # sin información suficiente → gasto por defecto
+
+    irpf_pct = abs(int(datos_brutos.get("irpf_porcentaje") or 0))
+    irpf_cant = abs(float(datos_brutos.get("irpf_cantidad") or 0))
 
     return {
         "archivo": f"{'ingresos' if tipo == 'ingreso' else 'gastos'}/{nombre_archivo}",
@@ -315,8 +332,8 @@ def construir_registro(datos_brutos, nombre_archivo):
         "base_imponible": float(datos_brutos.get("base_imponible") or 0),
         "iva_porcentaje": int(datos_brutos.get("iva_porcentaje") or 21),
         "iva_cantidad": float(datos_brutos.get("iva_cantidad") or 0),
-        "irpf_porcentaje": int(datos_brutos.get("irpf_porcentaje") or 0),
-        "irpf_cantidad": float(datos_brutos.get("irpf_cantidad") or 0),
+        "irpf_porcentaje": irpf_pct,
+        "irpf_cantidad": -irpf_cant if irpf_cant > 0 else 0.0,
         "total": float(datos_brutos.get("total") or 0),
         "moneda": "EUR"
     }
