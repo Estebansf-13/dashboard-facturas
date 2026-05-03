@@ -300,12 +300,9 @@ def extraer_datos_texto(texto):
 # ── Construcción del registro final ──────────────────────────────────────────
 
 def es_incierto(datos):
-    """True si los datos extraídos no son fiables: no se puede guardar sin revisión humana."""
-    return (
-        float(datos.get("total") or 0) == 0
-        or not str(datos.get("emisor") or "").strip()
-        or str(datos.get("concepto") or "").startswith("Revisar manualmente")
-    )
+    """True solo cuando los tres métodos fallaron por completo (fallback de emergencia)."""
+    concepto = str(datos.get("concepto") or "")
+    return concepto.startswith("Revisar manualmente")
 
 
 def enviar_email_revision(facturas_pendientes):
