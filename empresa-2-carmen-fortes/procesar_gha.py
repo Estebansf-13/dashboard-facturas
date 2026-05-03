@@ -19,7 +19,7 @@ except ImportError:
 try:
     import pytesseract
     from pdf2image import convert_from_path
-    from PIL import ImageEnhance, ImageFilter
+    from PIL import ImageEnhance
     TIENE_OCR = True
 except ImportError:
     TIENE_OCR = False
