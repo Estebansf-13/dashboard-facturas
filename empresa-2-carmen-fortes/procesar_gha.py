@@ -131,6 +131,52 @@ def _limpiar_json_gemini(text):
     text = re.sub(r'(\d),(\d{2})(?=[\s,\n\}])', r'\1.\2', text)
     return json.loads(text)
 
+def _limpiar_datos_gemini(datos):
+    """Normaliza tipos numéricos en la respuesta de Gemini."""
+    for campo in ['base_imponible', 'iva_cantidad', 'irpf_cantidad', 'total']:
+        val = datos.get(campo, 0)
+        if isinstance(val, str):
+            val = val.replace(',', '.').replace(' ', '').replace('€', '')
+            try:
+                val = float(val)
+            except ValueError:
+                val = 0.0
+        datos[campo] = float(val or 0)
+    for campo in ['iva_porcentaje', 'irpf_porcentaje']:
+        val = datos.get(campo, 0)
+        try:
+            datos[campo] = int(float(str(val).replace(',', '.')))
+        except (ValueError, TypeError):
+            datos[campo] = 21 if campo == 'iva_porcentaje' else 0
+    return datos
+
+
+def extraer_con_gemini_texto(texto):
+    """Envía el texto extraído por pdfplumber a Gemini — no necesita pdf2image."""
+    if not TIENE_GEMINI:
+        return None
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        client = google_genai.Client(api_key=api_key)
+        prompt = PROMPT_VISION + f"\n\nTexto completo de la factura:\n\n{texto}"
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt
+        )
+        text = response.text.strip()
+        print(f"  Gemini texto: {text[:200]}...")
+        datos = _limpiar_json_gemini(text)
+        return _limpiar_datos_gemini(datos)
+    except json.JSONDecodeError as e:
+        print(f"  Error JSON Gemini texto: {e}")
+        return None
+    except Exception as e:
+        print(f"  Error Gemini texto: {e}")
+        return None
+
+
 def extraer_con_gemini(filepath):
     if not TIENE_GEMINI:
         return None
@@ -164,25 +210,7 @@ def extraer_con_gemini(filepath):
         print(f"  Respuesta Gemini: {text[:200]}...")
 
         datos = _limpiar_json_gemini(text)
-
-        for campo in ['base_imponible', 'iva_cantidad', 'irpf_cantidad', 'total']:
-            val = datos.get(campo, 0)
-            if isinstance(val, str):
-                val = val.replace(',', '.').replace(' ', '').replace('€', '')
-                try:
-                    val = float(val)
-                except ValueError:
-                    val = 0.0
-            datos[campo] = float(val or 0)
-
-        for campo in ['iva_porcentaje', 'irpf_porcentaje']:
-            val = datos.get(campo, 0)
-            try:
-                datos[campo] = int(float(str(val).replace(',', '.')))
-            except (ValueError, TypeError):
-                datos[campo] = 21 if campo == 'iva_porcentaje' else 0
-
-        return datos
+        return _limpiar_datos_gemini(datos)
 
     except json.JSONDecodeError as e:
         print(f"  Error parseando JSON de Gemini: {e}")
@@ -412,27 +440,34 @@ def main():
         ext = archivo.suffix.lower()
         datos = None
 
-        # Paso 1: pdfplumber (solo PDFs digitales con texto)
-        if ext in EXTENSIONES_PDF:
-            texto = extraer_texto_pdf(str(archivo))
-            if texto.strip():
-                datos_texto = extraer_datos_texto(texto)
-                if datos_texto["total"] > 0 or datos_texto["base_imponible"] > 0:
-                    datos = datos_texto
-                    print(f"  pdfplumber OK — Total: {datos['total']} EUR")
+        texto_pdf = ''
 
-        # Paso 2: Gemini Vision
-        if not datos or datos.get("total", 0) == 0:
+        # Paso 1: extraer texto del PDF (sin regex todavía)
+        if ext in EXTENSIONES_PDF:
+            texto_pdf = extraer_texto_pdf(str(archivo))
+
+        # Paso 2: Gemini con texto digital (más fiable que regex, no necesita pdf2image)
+        if texto_pdf.strip():
+            print("  PDF digital detectado — enviando texto a Gemini...")
+            datos = extraer_con_gemini_texto(texto_pdf)
+            if datos and float(datos.get("total") or 0) > 0:
+                print(f"  Gemini texto OK — Total: {datos['total']} EUR")
+            else:
+                print("  Gemini texto no extrajo total — probando visión...")
+                datos = None
+
+        # Paso 3: Gemini Vision (fotos, escaneos, o si texto falló)
+        if not datos:
             print("  Usando Gemini Vision...")
             vision = extraer_con_gemini(str(archivo))
             if vision and float(vision.get("total") or 0) > 0:
                 datos = vision
-                print(f"  Gemini OK — Total: {datos['total']} EUR")
+                print(f"  Gemini Vision OK — Total: {datos['total']} EUR")
             elif vision:
                 datos = vision
-                print(f"  Gemini respondió pero total=0.")
+                print("  Gemini Vision respondió pero total=0.")
 
-        # Paso 3: Tesseract (fallback)
+        # Paso 4: Tesseract (último recurso si Gemini no disponible)
         if not datos or datos.get("total", 0) == 0:
             print("  Intentando Tesseract...")
             texto_ocr = extraer_con_tesseract(str(archivo))
