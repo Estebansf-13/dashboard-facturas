@@ -5,5 +5,23 @@
     "nombre": "Carmen Fortes Pardo",
     "cif": "22972441H"
   },
-  "facturas": []
+  "facturas": [
+    {
+      "archivo": "gastos/factura_carmen_fortes_30-03-2026.pdf",
+      "tipo": "gasto",
+      "numero": "factura_carmen_fortes_30-03-2026",
+      "fecha": "2026-05-03",
+      "emisor": "",
+      "receptor": "",
+      "concepto": "Revisar manualmente: factura_carmen_fortes_30-03-2026.pdf",
+      "base_imponible": 0.0,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 0.0,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0.0,
+      "total": 0.0,
+      "moneda": "EUR",
+      "estado": "pendiente_revision"
+    }
+  ]
 }
