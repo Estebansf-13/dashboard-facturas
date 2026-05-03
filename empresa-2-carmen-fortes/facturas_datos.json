@@ -37,6 +37,22 @@
       "irpf_cantidad": 0,
       "total": 30.0,
       "moneda": "EUR"
+    },
+    {
+      "archivo": "gastos/bb.pdf",
+      "tipo": "gastos",
+      "numero": "bb",
+      "fecha": "2026-05-03",
+      "emisor": "",
+      "receptor": "",
+      "concepto": "Revisar manualmente: bb.pdf",
+      "base_imponible": 0.0,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 0.0,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0.0,
+      "total": 0.0,
+      "moneda": "EUR"
     }
   ]
 }
