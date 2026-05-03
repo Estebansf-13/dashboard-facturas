@@ -5,5 +5,22 @@
     "nombre": "Carmen Fortes Pardo",
     "cif": "B-XXXXXXXX"
   },
-  "facturas": []
+  "facturas": [
+    {
+      "archivo": "gastos/Minuta stro  01202400140907.pdf",
+      "tipo": "gasto",
+      "numero": "Minuta stro  01202400140907",
+      "fecha": "2026-05-03",
+      "emisor": "",
+      "receptor": "",
+      "concepto": "Revisar manualmente: Minuta stro  01202400140907.pdf",
+      "base_imponible": 0.0,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 0.0,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0.0,
+      "total": 0.0,
+      "moneda": "EUR"
+    }
+  ]
 }
