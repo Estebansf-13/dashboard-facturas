@@ -1,9 +1,27 @@
 {
-  "fecha_generacion": "2026-05-04",
+  "fecha_generacion": "2026-05-03",
   "rango": "",
   "emisor_propio": {
     "nombre": "Carmen Fortes Pardo",
     "cif": "22972441H"
   },
-  "facturas": []
+  "facturas": [
+    {
+      "archivo": "gastos/factura_carmen_fortes_30-03-2026.pdf",
+      "tipo": "gasto",
+      "numero": "CF-30-03",
+      "fecha": "2026-03-30",
+      "emisor": "(proveedor):",
+      "receptor": "Cliente General",
+      "concepto": "IMPORTE",
+      "base_imponible": 500.0,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 105.0,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0.0,
+      "total": 605.0,
+      "moneda": "EUR",
+      "estado": "confirmado"
+    }
+  ]
 }
