@@ -472,34 +472,35 @@ def main():
         ext = archivo.suffix.lower()
         datos = None
 
-        # Paso 1: Gemini con el archivo directamente (PDF o imagen)
-        # Lee texto Y layout visual — funciona para cualquier tipo de factura
+        # Paso 1: Gemini con PDF nativo (lee texto + layout visual)
         if ext in EXTENSIONES_PDF:
-            print("  Enviando PDF a Gemini...")
+            print("  Enviando PDF nativo a Gemini...")
             datos = extraer_con_gemini_pdf(str(archivo))
             if datos and float(datos.get("total") or 0) > 0:
                 print(f"  Gemini PDF OK — Total: {datos['total']} EUR")
             else:
-                print("  Gemini PDF no extrajo total — probando con texto...")
                 datos = None
-        elif ext in EXTENSIONES_IMAGEN:
+
+        # Paso 2: Gemini Vision con imagen (PDF → JPEG → Gemini)
+        # Necesario para PDFs con tablas complejas o gráficos donde el texto extraído es confuso
+        if not datos:
+            print("  Gemini Vision (imagen)...")
+            vision = extraer_con_gemini(str(archivo))
+            if vision and float(vision.get("total") or 0) > 0:
+                datos = vision
+                print(f"  Gemini Vision OK — Total: {datos['total']} EUR")
+            elif vision and float(vision.get("base_imponible") or 0) > 0:
+                datos = vision
+                print(f"  Gemini Vision OK (sin total explícito) — Base: {datos['base_imponible']} EUR")
+
+        # Paso 3: Imágenes directas (fotos y escaneos)
+        if not datos and ext in EXTENSIONES_IMAGEN:
             print("  Enviando imagen a Gemini Vision...")
             datos = extraer_con_gemini(str(archivo))
             if datos and float(datos.get("total") or 0) > 0:
                 print(f"  Gemini Vision OK — Total: {datos['total']} EUR")
-            else:
-                datos = None
 
-        # Paso 2: Fallback — pdfplumber + Gemini texto (si PDF nativo falló)
-        if not datos and ext in EXTENSIONES_PDF:
-            texto_pdf = extraer_texto_pdf(str(archivo))
-            if texto_pdf.strip():
-                print("  Fallback: enviando texto a Gemini...")
-                datos = extraer_con_gemini_texto(texto_pdf)
-                if datos and float(datos.get("total") or 0) > 0:
-                    print(f"  Gemini texto OK — Total: {datos['total']} EUR")
-
-        # Paso 3: Tesseract (solo si Gemini no está disponible)
+        # Paso 4: Tesseract (solo si Gemini no está disponible — sin GEMINI_API_KEY)
         if not datos or datos.get("total", 0) == 0:
             print("  Intentando Tesseract...")
             texto_ocr = extraer_con_tesseract(str(archivo))
