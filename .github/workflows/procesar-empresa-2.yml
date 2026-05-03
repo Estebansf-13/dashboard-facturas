@@ -24,7 +24,7 @@ jobs:
         run: sudo apt-get install -y tesseract-ocr tesseract-ocr-spa poppler-utils libheif-dev
 
       - name: Instalar dependencias Python
-        run: pip install pdfplumber pdf2image pillow pillow-heif pytesseract google-generativeai
+        run: pip install pdfplumber pdf2image pillow pillow-heif pytesseract google-genai
 
       - name: Procesar facturas nuevas
         env:

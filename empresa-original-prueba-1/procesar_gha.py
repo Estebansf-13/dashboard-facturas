@@ -9,8 +9,10 @@ Cascada de métodos:
 Formatos soportados: .pdf .PDF .jpg .jpeg .png .heic .heif .webp
 """
 
-import re, json, time, shutil, os
+import re, json, time, shutil, os, io
 from pathlib import Path
+from PIL import Image
+Image.MAX_IMAGE_PIXELS = None  # evitar error decompression bomb en fotos grandes
 
 try:
     import pdfplumber
@@ -21,13 +23,14 @@ except ImportError:
 try:
     import pytesseract
     from pdf2image import convert_from_path
-    from PIL import Image, ImageEnhance
+    from PIL import ImageEnhance
     TIENE_OCR = True
 except ImportError:
     TIENE_OCR = False
 
 try:
-    import google.generativeai as genai
+    from google import genai as google_genai
+    from google.genai import types as genai_types
     TIENE_GEMINI = True
 except ImportError:
     TIENE_GEMINI = False
@@ -62,7 +65,6 @@ Devuelve ÚNICAMENTE un JSON válido (sin texto adicional, sin bloques markdown 
 Reglas:
 - Los importes son números decimales con PUNTO (no coma): 430.51, no 430,51
 - Si no hay IRPF, usa 0
-- Si el IVA es 21%, iva_porcentaje = 21
 - El total es el importe final a pagar (incluyendo IVA, menos IRPF si lo hay)
 - Si hay Recargo de Equivalencia (R.E.), súmalo al IVA total
 - La fecha en formato YYYY-MM-DD (ej: 2025-11-24)
@@ -89,22 +91,25 @@ def extraer_texto_pdf(filepath):
         return ''
 
 
-# ── 2. Gemini Vision — método principal para escaneados y fotos ───────────────
+# ── 2. Gemini Vision (SDK nuevo: google-genai + gemini-2.0-flash) ─────────────
+
+def _pil_a_bytes(img):
+    buf = io.BytesIO()
+    img.convert('RGB').save(buf, format='JPEG', quality=85)
+    return buf.getvalue()
 
 def _cargar_imagenes_pdf(filepath):
     try:
         from pdf2image import convert_from_path
-        imgs = convert_from_path(str(filepath), dpi=300, fmt='png')
-        return imgs[:4]
+        imgs = convert_from_path(str(filepath), dpi=150, fmt='jpeg')
+        return imgs[:3]
     except Exception as e:
         print(f"  Error convirtiendo PDF a imagen: {e}")
         return []
 
 def _cargar_imagen_directa(filepath):
     try:
-        from PIL import Image
-        img = Image.open(str(filepath))
-        img = img.convert('RGB')
+        img = Image.open(str(filepath)).convert('RGB')
         return [img]
     except Exception as e:
         print(f"  Error cargando imagen: {e}")
@@ -127,21 +132,26 @@ def extraer_con_gemini(filepath):
         return None
 
     ext = Path(filepath).suffix.lower()
-    if ext in EXTENSIONES_IMAGEN:
-        imagenes = _cargar_imagen_directa(filepath)
-    else:
-        imagenes = _cargar_imagenes_pdf(filepath)
+    imagenes = _cargar_imagen_directa(filepath) if ext in EXTENSIONES_IMAGEN else _cargar_imagenes_pdf(filepath)
 
     if not imagenes:
         print("  No se pudieron cargar las imágenes del documento.")
         return None
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        client = google_genai.Client(api_key=api_key)
 
-        contenido = [PROMPT_VISION] + imagenes
-        response = model.generate_content(contenido)
+        partes = [PROMPT_VISION]
+        for img in imagenes:
+            partes.append(genai_types.Part.from_bytes(
+                data=_pil_a_bytes(img),
+                mime_type='image/jpeg'
+            ))
+
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=partes
+        )
         text = response.text.strip()
         print(f"  Respuesta Gemini: {text[:200]}...")
 
@@ -175,23 +185,23 @@ def extraer_con_gemini(filepath):
         return None
 
 
-# ── 3. OCR con Tesseract (fallback sin API key Gemini) ───────────────────────
+# ── 3. OCR con Tesseract (fallback) ──────────────────────────────────────────
 
 def extraer_con_tesseract(filepath):
     if not TIENE_OCR:
         return ''
     try:
+        from PIL import ImageEnhance as IE
         ext = Path(filepath).suffix.lower()
         if ext in EXTENSIONES_IMAGEN:
-            from PIL import Image, ImageEnhance
             img = Image.open(str(filepath)).convert('L')
-            img = ImageEnhance.Contrast(img).enhance(2.0)
+            img = IE.Contrast(img).enhance(2.0)
             return pytesseract.image_to_string(img, lang='spa+eng', config='--psm 6')
         else:
-            images = convert_from_path(str(filepath), dpi=300, fmt='png')
+            images = convert_from_path(str(filepath), dpi=150, fmt='jpeg')
             textos = []
             for img in images[:3]:
-                img = ImageEnhance.Contrast(img.convert('L')).enhance(2.0)
+                img = IE.Contrast(img.convert('L')).enhance(2.0)
                 t = pytesseract.image_to_string(img, lang='spa+eng', config='--psm 6')
                 if t.strip():
                     textos.append(t)
@@ -215,7 +225,7 @@ def parsear_importe(texto):
         return 0.0
 
 
-# ── Extracción con regex (para texto de pdfplumber/Tesseract) ─────────────────
+# ── Extracción con regex (pdfplumber / Tesseract) ─────────────────────────────
 
 def extraer_datos_texto(texto):
     d = {
@@ -335,7 +345,6 @@ def main():
         ext = archivo.suffix.lower()
         datos = None
 
-        # ── Paso 1: pdfplumber (solo para PDFs digitales) ──
         if ext in EXTENSIONES_PDF:
             texto = extraer_texto_pdf(str(archivo))
             if texto.strip():
@@ -344,20 +353,18 @@ def main():
                     datos = datos_texto
                     print(f"  pdfplumber OK — Total: {datos['total']} EUR")
 
-        # ── Paso 2: Gemini Vision (fotos, escaneados, PDFs con imagen) ──
         if not datos or datos.get("total", 0) == 0:
-            print("  Usando Gemini Vision para análisis visual...")
+            print("  Usando Gemini Vision...")
             vision = extraer_con_gemini(str(archivo))
             if vision and float(vision.get("total") or 0) > 0:
                 datos = vision
-                print(f"  Gemini Vision OK — Total: {datos['total']} EUR")
+                print(f"  Gemini OK — Total: {datos['total']} EUR")
             elif vision:
-                print(f"  Gemini respondió pero total=0. Datos: {vision}")
                 datos = vision
+                print(f"  Gemini respondió pero total=0.")
 
-        # ── Paso 3: Tesseract (fallback si no hay API key Gemini) ──
         if not datos or datos.get("total", 0) == 0:
-            print("  Intentando Tesseract OCR como último recurso...")
+            print("  Intentando Tesseract...")
             texto_ocr = extraer_con_tesseract(str(archivo))
             if texto_ocr.strip():
                 datos_ocr = extraer_datos_texto(texto_ocr)
@@ -365,9 +372,7 @@ def main():
                     datos = datos_ocr
                     print(f"  Tesseract OK — Total: {datos['total']} EUR")
 
-        # ── Fallback ──
         if not datos:
-            print("  Ningún método funcionó. Guardando para revisión manual.")
             datos = {
                 "numero": archivo.stem, "fecha": time.strftime("%Y-%m-%d"),
                 "emisor": "", "receptor": "",
@@ -378,7 +383,6 @@ def main():
             }
 
         registro = construir_registro(datos, archivo.name)
-
         dest_dir = INGRESOS_DIR if registro["tipo"] == "ingreso" else GASTOS_DIR
 
         data["facturas"] = [f for f in data["facturas"]
@@ -396,7 +400,7 @@ def main():
             json.dump(data, f, ensure_ascii=False, indent=2)
         with open(JSON_PATH, 'r', encoding='utf-8') as f:
             json.load(f)
-        print(f"\n{procesados} factura(s) procesada(s). JSON validado. Dashboard actualizado.")
+        print(f"\n{procesados} factura(s) procesada(s). JSON validado.")
 
 
 if __name__ == "__main__":
