@@ -302,50 +302,73 @@ def extraer_datos_texto(texto):
         "irpf_porcentaje": 0, "irpf_cantidad": 0.0, "total": 0.0
     }
 
-    m = re.search(r'(?:FACTURA|Factura)\s*[Nn][°ºo.\s]*(\S+)', texto, re.IGNORECASE)
-    if not m:
-        m = re.search(r'[Nn][úu]mero\s+de\s+factura[:\s]+(\S+)', texto, re.IGNORECASE)
-    if m:
-        d["numero"] = m.group(1).rstrip('.,')
+    # Número: busca "Nº", "No.", "N°", "Número de factura:" — nunca captura NIFs (que van sin "N")
+    for pat in [
+        r'[Nn][úu]mero\s+de\s+(?:factura|albar[aá]n)[:\s]+(\S+)',
+        r'(?:FACTURA|Factura|ALBAR[AÁ]N)\s+[Nn][°ºo\.]\s*(\S+)',
+        r'(?:FACTURA|Factura)\s+N[°ºo]\s*[:.\s]*(\S+)',
+    ]:
+        m = re.search(pat, texto, re.IGNORECASE)
+        if m:
+            d["numero"] = m.group(1).rstrip('.,')
+            break
 
-    m = re.search(r'(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})', texto)
+    # Fecha: primera fecha con formato dd/mm/aaaa o dd-mm-aaaa
+    m = re.search(r'\b(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})\b', texto)
     if m:
         d["fecha"] = f"{m.group(3)}-{m.group(2).zfill(2)}-{m.group(1).zfill(2)}"
 
-    for pat in [r'(?:Emisor|Proveedor|De|Empresa)[\s:]+([^\n]+)',
-                r'^([A-ZÁÉÍÓÚÑ][^\n]{3,40}(?:SL|SA|SAU|SLU|Ltd))']:
+    # Emisor
+    for pat in [
+        r'EMISOR\s*\([^)]*\)[:\s]+([^\n]+)',
+        r'(?:Emisor|Proveedor|De|Empresa)[:\s]+([^\n]+)',
+        r'^([A-ZÁÉÍÓÚÑ][^\n]{3,40}(?:SL|SA|SAU|SLU|Ltd))',
+    ]:
         m = re.search(pat, texto, re.IGNORECASE | re.MULTILINE)
         if m:
             d["emisor"] = m.group(1).strip()
             break
 
-    for pat in [r'(?:Cliente|Facturar a|Receptor|Para)[\s:]+([^\n]+)',
-                r'(?:CIF|NIF)[\s:/]+[A-Z0-9\-]+\s+([^\n]+)']:
+    # Receptor
+    for pat in [
+        r'FACTURAR\s+A[:\s]+([^\n]+)',
+        r'(?:Cliente|Receptor|Destinatario|Para)[:\s]+([^\n]+)',
+    ]:
         m = re.search(pat, texto, re.IGNORECASE)
         if m:
             d["receptor"] = m.group(1).strip()
             break
 
-    m = re.search(r'(?:Concepto|Descripci[oó]n|Servicio)[\s:]+([^\n]+)', texto, re.IGNORECASE)
+    # Concepto
+    m = re.search(r'(?:Concepto|Descripci[oó]n|Servicio)[:\s]+([^\n]+)', texto, re.IGNORECASE)
     if m:
         d["concepto"] = m.group(1).strip()
 
-    m = re.search(r'[Bb]ase\s+[Ii]mponible[\s:€]*([0-9.,]+)', texto)
+    # Base imponible — acepta "Base imponible", "BASE IMPONIBLE", "Base imp.", "BASE:"
+    m = re.search(r'[Bb]ase\.?\s*[Ii]mponible\.?[:\s€]*([0-9]+[.,][0-9]+)', texto)
+    if not m:
+        m = re.search(r'\bBASE[:\s€]+([0-9]+[.,][0-9]+)', texto)
     if m:
         d["base_imponible"] = parsear_importe(m.group(1))
 
-    m = re.search(r'IVA\s*(\d+)\s*%[\s:€]*([0-9.,]+)', texto, re.IGNORECASE)
+    # IVA — acepta "IVA", "I.V.A.", "IVA 21%", "I.V.A. 21%"
+    m = re.search(r'I\.?V\.?A\.?\s*(\d+)\s*%[^\S\n]*[:\s€]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
     if m:
         d["iva_porcentaje"] = int(m.group(1))
         d["iva_cantidad"] = parsear_importe(m.group(2))
 
-    m = re.search(r'IRPF\s*-?\s*(\d+)\s*%[\s:€]*([0-9.,]+)', texto, re.IGNORECASE)
+    # IRPF — acepta "IRPF 15%", "IRPF -15%", "IRPF (15%)", "- IRPF 15%"
+    m = re.search(r'IRPF\s*[\-\(]?\s*(\d+)\s*%\)?[^\S\n]*[:\s€]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
     if m:
-        d["irpf_porcentaje"] = -int(m.group(1))
-        d["irpf_cantidad"] = -parsear_importe(m.group(2))
+        d["irpf_porcentaje"] = int(m.group(1))
+        d["irpf_cantidad"] = parsear_importe(m.group(2))
 
-    # Acepta "TOTAL 605", "TOTAL FACTURA 605", "TOTAL A PAGAR 605", etc.
-    m = re.search(r'TOTAL\s*(?:FACTURA|NETO|A\s+PAGAR|MINUTA|IMPORTE)?\s*[:\s€]*([0-9.,]+)', texto, re.IGNORECASE)
+    # TOTAL — requiere número con decimales (p.ej. 430,51) para no capturar "1" de número de línea
+    # No cruza líneas (usa [^\S\n] en vez de \s)
+    m = re.search(
+        r'TOTAL[^\S\n]*(?:FACTURA|NETO|A\s+PAGAR|MINUTA|IMPORTE|:)?[^\S\n€]*([0-9]+[.,][0-9]+)',
+        texto, re.IGNORECASE
+    )
     if m:
         d["total"] = parsear_importe(m.group(1))
 
@@ -356,8 +379,7 @@ def extraer_datos_texto(texto):
     elif d["iva_cantidad"] == 0 and d["base_imponible"] > 0 and d["total"] > d["base_imponible"]:
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
     elif d["total"] == 0 and d["base_imponible"] > 0:
-        # Total no detectado pero base sí — calcularlo
-        d["total"] = round(d["base_imponible"] + d["iva_cantidad"] - abs(d["irpf_cantidad"]), 2)
+        d["total"] = round(d["base_imponible"] + d["iva_cantidad"] - d["irpf_cantidad"], 2)
 
     return d
 
@@ -493,14 +515,7 @@ def main():
                 datos = vision
                 print(f"  Gemini Vision OK (sin total explícito) — Base: {datos['base_imponible']} EUR")
 
-        # Paso 3: Imágenes directas (fotos y escaneos)
-        if not datos and ext in EXTENSIONES_IMAGEN:
-            print("  Enviando imagen a Gemini Vision...")
-            datos = extraer_con_gemini(str(archivo))
-            if datos and float(datos.get("total") or 0) > 0:
-                print(f"  Gemini Vision OK — Total: {datos['total']} EUR")
-
-        # Paso 4: Tesseract (solo si Gemini no está disponible — sin GEMINI_API_KEY)
+        # Paso 3: Tesseract (solo si Gemini no está disponible — sin GEMINI_API_KEY)
         if not datos or datos.get("total", 0) == 0:
             print("  Intentando Tesseract...")
             texto_ocr = extraer_con_tesseract(str(archivo))
@@ -526,9 +541,9 @@ def main():
             print(f"  ⚠ Datos incompletos — marcado para revisión manual.")
         dest_dir = INGRESOS_DIR if registro["tipo"] == "ingreso" else GASTOS_DIR
 
+        # Deduplicar por ruta de archivo (no por número, que puede coincidir entre proveedores)
         data["facturas"] = [f for f in data["facturas"]
-                            if f.get("numero") != registro["numero"]
-                            or f.get("archivo") == registro["archivo"]]
+                            if f.get("archivo") != registro["archivo"]]
         data["facturas"].append(registro)
         data["fecha_generacion"] = time.strftime("%Y-%m-%d")
 
