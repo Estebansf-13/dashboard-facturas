@@ -94,8 +94,10 @@ function renderDashboard(data) {
     return;
   }
 
-  const ingresos = facturas.filter(f => f.tipo === 'ingreso');
-  const gastos = facturas.filter(f => f.tipo === 'gasto');
+  const pendientes = facturas.filter(f => f.estado === 'pendiente_revision');
+  const confirmadas = facturas.filter(f => f.estado !== 'pendiente_revision');
+  const ingresos = confirmadas.filter(f => f.tipo === 'ingreso');
+  const gastos = confirmadas.filter(f => f.tipo === 'gasto');
 
   const totalIng = ingresos.reduce((s, f) => s + f.base_imponible, 0);
   const totalGas = gastos.reduce((s, f) => s + f.base_imponible, 0);
@@ -111,7 +113,7 @@ function renderDashboard(data) {
   const ticketMedio = ingresos.length > 0 ? totalIng / ingresos.length : 0;
 
   // Rango de fechas
-  const fechas = facturas.map(f => f.fecha).sort();
+  const fechas = confirmadas.map(f => f.fecha).sort();
   const fechaMin = fechas[0], fechaMax = fechas[fechas.length - 1];
   const mMin = parseInt(fechaMin.split('-')[1]) - 1, yMin = fechaMin.split('-')[0];
   const mMax = parseInt(fechaMax.split('-')[1]) - 1, yMax = fechaMax.split('-')[0];
@@ -119,7 +121,8 @@ function renderDashboard(data) {
 
   // Header
   document.getElementById('d-periodo').innerHTML = '<strong>Periodo:</strong> ' + rangoTexto;
-  document.getElementById('d-conteo').innerHTML = `<strong>${facturas.length} facturas procesadas</strong> (${ingresos.length} ingresos + ${gastos.length} gastos)`;
+  const pendienteTxt = pendientes.length > 0 ? ` · <span style="color:#f59e0b">⚠ ${pendientes.length} pendiente(s) de revisión</span>` : '';
+  document.getElementById('d-conteo').innerHTML = `<strong>${confirmadas.length} facturas confirmadas</strong> (${ingresos.length} ingresos + ${gastos.length} gastos)${pendienteTxt}`;
 
   // KPIs
   document.getElementById('kpi-ing').innerHTML = fmt(totalIng) + '<span class="currency">€</span>';
@@ -135,7 +138,7 @@ function renderDashboard(data) {
 
   // === GRÁFICO MENSUAL ===
   const meses = {};
-  facturas.forEach(f => {
+  confirmadas.forEach(f => {
     const key = f.fecha.substring(0, 7);
     if (!meses[key]) meses[key] = { ing: 0, gas: 0 };
     if (f.tipo === 'ingreso') meses[key].ing += f.base_imponible;
@@ -160,7 +163,7 @@ function renderDashboard(data) {
 
   // === TRIMESTRES IVA ===
   const trims = {};
-  facturas.forEach(f => {
+  confirmadas.forEach(f => {
     const q = trimestre(f.fecha);
     if (!trims[q]) trims[q] = { rep: 0, sop: 0 };
     if (f.tipo === 'ingreso') trims[q].rep += f.iva_cantidad;
@@ -204,6 +207,10 @@ function renderDashboard(data) {
 
   // === ALERTAS ===
   let alertHTML = '';
+  if (pendientes.length > 0) {
+    const lista = pendientes.map(f => `<li><strong>${f.archivo}</strong> — ${f.concepto}</li>`).join('');
+    alertHTML += `<div class="alert warning" style="border-left-color:#ef4444"><span class="icon">⚠</span><div><strong>${pendientes.length} factura(s) pendiente(s) de revisión.</strong> El sistema no pudo leerlas con suficiente claridad. Aparecen marcadas en la tabla y <u>no están incluidas en los totales</u>.<ul style="margin:6px 0 0 16px;font-size:12px">${lista}</ul></div></div>`;
+  }
   if (sortedTrims.length >= 2) {
     const last = sortedTrims[sortedTrims.length - 1];
     const prev = sortedTrims[sortedTrims.length - 2];
@@ -245,13 +252,16 @@ function renderDashboard(data) {
   document.getElementById('alertas').innerHTML = alertHTML;
 
   // === TABLA DETALLE ===
-  const sorted = [...facturas].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const sorted = [...facturas].sort((a, b) => a.fecha.localeCompare(b.fecha)); // incluye pendientes
   let tablaHTML = '';
   sorted.forEach(f => {
     const [y, m, d] = f.fecha.split('-');
     const fechaFmt = `${d}/${m}/${y.slice(2)}`;
     const esIngreso = f.tipo === 'ingreso';
-    const badge = esIngreso ? '<span class="badge ingreso">Ingreso</span>' : '<span class="badge gasto">Gasto</span>';
+    const esPendiente = f.estado === 'pendiente_revision';
+    const badge = esPendiente
+      ? '<span class="badge" style="background:#f59e0b;color:#000">⚠ Revisar</span>'
+      : esIngreso ? '<span class="badge ingreso">Ingreso</span>' : '<span class="badge gasto">Gasto</span>';
     const nombre = esIngreso ? f.receptor : f.emisor;
     const nombreCorto = nombre.replace(/ SL$| SA$| SAU$| Ltd$/, '').substring(0, 25);
     const concepto = f.concepto.substring(0, 30);
@@ -262,7 +272,8 @@ function renderDashboard(data) {
 
   // Footer
   const hoy = new Date();
-  document.getElementById('footer-fecha').textContent = `Generado el ${hoy.getDate()} de ${MESES[hoy.getMonth()]} de ${hoy.getFullYear()} · Datos de ${facturas.length} facturas · Auto-recarga activa`;
+  const pendienteFtr = pendientes.length > 0 ? ` · ⚠ ${pendientes.length} pendiente(s)` : '';
+  document.getElementById('footer-fecha').textContent = `Generado el ${hoy.getDate()} de ${MESES[hoy.getMonth()]} de ${hoy.getFullYear()} · ${confirmadas.length} facturas confirmadas${pendienteFtr} · Auto-recarga activa`;
 }
 
 // Carga inicial + auto-recarga cada 3 segundos

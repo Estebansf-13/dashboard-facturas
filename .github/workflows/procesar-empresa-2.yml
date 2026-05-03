@@ -29,6 +29,8 @@ jobs:
       - name: Procesar facturas nuevas
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: python empresa-2-carmen-fortes/procesar_gha.py
 
       - name: Validar JSON antes de subir

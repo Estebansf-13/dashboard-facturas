@@ -9,7 +9,8 @@ Cascada de métodos:
 Formatos soportados: .pdf .PDF .jpg .jpeg .png .heic .heif .webp
 """
 
-import re, json, time, shutil, os, io
+import re, json, time, shutil, os, io, smtplib
+from email.mime.text import MIMEText
 from pathlib import Path
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None  # evitar error decompression bomb en fotos grandes
@@ -156,7 +157,7 @@ def extraer_con_gemini(filepath):
             ))
 
         response = client.models.generate_content(
-            model='gemini-2.0-flash-lite',
+            model='gemini-2.0-flash',
             contents=partes
         )
         text = response.text.strip()
@@ -298,6 +299,51 @@ def extraer_datos_texto(texto):
 
 # ── Construcción del registro final ──────────────────────────────────────────
 
+def es_incierto(datos):
+    """True si los datos extraídos no son fiables: no se puede guardar sin revisión humana."""
+    return (
+        float(datos.get("total") or 0) == 0
+        or not str(datos.get("emisor") or "").strip()
+        or str(datos.get("concepto") or "").startswith("Revisar manualmente")
+    )
+
+
+def enviar_email_revision(facturas_pendientes):
+    gmail_user = os.environ.get("GMAIL_USER")
+    gmail_pass = os.environ.get("GMAIL_APP_PASSWORD")
+    if not gmail_user or not gmail_pass:
+        print("  GMAIL_USER/GMAIL_APP_PASSWORD no configuradas — saltando email.")
+        return
+
+    destinatario = "esteban.saurafortes@gmail.com"
+    lineas = "\n".join(f"  • {f['archivo']} — {f['concepto']}" for f in facturas_pendientes)
+    cuerpo = f"""Hola Carmen,
+
+El sistema ha procesado {len(facturas_pendientes)} factura(s) que necesitan revisión manual porque no se pudieron leer con suficiente claridad:
+
+{lineas}
+
+Accede al dashboard para ver los detalles y corregir los datos:
+https://estebansf-13.github.io/dashboard-facturas/empresa-2-carmen-fortes/dashboard-facturacion.html
+
+Las facturas pendientes aparecen marcadas con ⚠ REVISAR en la tabla y no están incluidas en los totales hasta que las confirmes.
+
+— Sistema automático Dashboard Carmen Fortes Pardo
+"""
+    msg = MIMEText(cuerpo, 'plain', 'utf-8')
+    msg['Subject'] = f'⚠ {len(facturas_pendientes)} factura(s) pendiente(s) de revisión — Carmen Fortes'
+    msg['From'] = gmail_user
+    msg['To'] = destinatario
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(gmail_user, gmail_pass)
+            server.sendmail(gmail_user, destinatario, msg.as_string())
+        print(f"  Email enviado a {destinatario}")
+    except Exception as e:
+        print(f"  Error enviando email: {e}")
+
+
 def _es_propio(texto):
     """True si el texto contiene el nombre o NIF de Carmen Fortes Pardo."""
     t = texto.lower()
@@ -335,7 +381,8 @@ def construir_registro(datos_brutos, nombre_archivo):
         "irpf_porcentaje": irpf_pct,
         "irpf_cantidad": -irpf_cant if irpf_cant > 0 else 0.0,
         "total": float(datos_brutos.get("total") or 0),
-        "moneda": "EUR"
+        "moneda": "EUR",
+        "estado": "confirmado"
     }
 
 
@@ -404,6 +451,9 @@ def main():
             }
 
         registro = construir_registro(datos, archivo.name)
+        if es_incierto(datos):
+            registro["estado"] = "pendiente_revision"
+            print(f"  ⚠ Datos incompletos — marcado para revisión manual.")
         dest_dir = INGRESOS_DIR if registro["tipo"] == "ingreso" else GASTOS_DIR
 
         data["facturas"] = [f for f in data["facturas"]
@@ -422,6 +472,11 @@ def main():
         with open(JSON_PATH, 'r', encoding='utf-8') as f:
             json.load(f)
         print(f"\n{procesados} factura(s) procesada(s). JSON validado.")
+
+        pendientes = [f for f in data["facturas"] if f.get("estado") == "pendiente_revision"]
+        if pendientes:
+            print(f"\n{len(pendientes)} factura(s) requieren revisión — enviando email...")
+            enviar_email_revision(pendientes)
 
 
 if __name__ == "__main__":
