@@ -37,38 +37,6 @@
       "irpf_cantidad": 0,
       "total": 30.0,
       "moneda": "EUR"
-    },
-    {
-      "archivo": "gastos/factura-1-000908.pdf",
-      "tipo": "gasto",
-      "numero": "000908",
-      "fecha": "2025-11-24",
-      "emisor": "RAI AUTOMOCIÓN",
-      "receptor": "Carmen de la Fe Fortes Pardo",
-      "concepto": "Mano de obra, alternador Lucas LRA0956, correas aux. — BMW 8152FBV",
-      "base_imponible": 355.79,
-      "iva_porcentaje": 21,
-      "iva_cantidad": 74.72,
-      "irpf_porcentaje": 0,
-      "irpf_cantidad": 0.0,
-      "total": 430.51,
-      "moneda": "EUR"
-    },
-    {
-      "archivo": "gastos/bb.pdf",
-      "tipo": "gasto",
-      "numero": "247",
-      "fecha": "2026-04-28",
-      "emisor": "BBA AUTOMOTOR SUR SL",
-      "receptor": "Carmen Fortes Pardo",
-      "concepto": "Batería 80AH Bosch 740A Silver + sustitución — BMW 8152FBV",
-      "base_imponible": 149.88,
-      "iva_porcentaje": 21,
-      "iva_cantidad": 31.47,
-      "irpf_porcentaje": 0,
-      "irpf_cantidad": 0.0,
-      "total": 181.35,
-      "moneda": "EUR"
     }
   ]
 }
