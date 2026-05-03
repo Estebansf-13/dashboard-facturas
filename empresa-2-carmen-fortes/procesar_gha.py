@@ -284,15 +284,20 @@ def extraer_datos_texto(texto):
         d["irpf_porcentaje"] = -int(m.group(1))
         d["irpf_cantidad"] = -parsear_importe(m.group(2))
 
-    m = re.search(r'TOTAL[\s:€]*([0-9.,]+)', texto, re.IGNORECASE)
+    # Acepta "TOTAL 605", "TOTAL FACTURA 605", "TOTAL A PAGAR 605", etc.
+    m = re.search(r'TOTAL\s*(?:FACTURA|NETO|A\s+PAGAR|MINUTA|IMPORTE)?\s*[:\s€]*([0-9.,]+)', texto, re.IGNORECASE)
     if m:
         d["total"] = parsear_importe(m.group(1))
 
+    # Reconstruir campos que falten
     if d["base_imponible"] == 0 and d["total"] > 0:
         d["base_imponible"] = round(d["total"] / 1.21, 2)
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
     elif d["iva_cantidad"] == 0 and d["base_imponible"] > 0 and d["total"] > d["base_imponible"]:
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
+    elif d["total"] == 0 and d["base_imponible"] > 0:
+        # Total no detectado pero base sí — calcularlo
+        d["total"] = round(d["base_imponible"] + d["iva_cantidad"] - abs(d["irpf_cantidad"]), 2)
 
     return d
 
@@ -412,7 +417,7 @@ def main():
             texto = extraer_texto_pdf(str(archivo))
             if texto.strip():
                 datos_texto = extraer_datos_texto(texto)
-                if datos_texto["total"] > 0:
+                if datos_texto["total"] > 0 or datos_texto["base_imponible"] > 0:
                     datos = datos_texto
                     print(f"  pdfplumber OK — Total: {datos['total']} EUR")
 
