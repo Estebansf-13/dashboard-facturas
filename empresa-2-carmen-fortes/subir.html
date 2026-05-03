@@ -71,7 +71,7 @@
 <div class="card">
   <h1>Subir Factura</h1>
   <div class="empresa">Carmen Fortes Pardo</div>
-  <p class="sub">Sube tu factura en PDF y el dashboard se actualiza solo</p>
+  <p class="sub">Sube tu factura en PDF o foto y el dashboard se actualiza solo</p>
 
   <div class="sin-config" id="avisoConfig" style="display:none">
     Primera vez: configura el acceso abajo para poder subir facturas.
@@ -79,10 +79,10 @@
 
   <div class="zona-drop" id="zona" onclick="document.getElementById('filePicker').click()">
     <div class="icono">📂</div>
-    <p>Haz clic aquí o arrastra el PDF</p>
-    <p><strong>Solo archivos PDF</strong></p>
+    <p>Haz clic aquí o arrastra la factura</p>
+    <p><strong>PDF, foto JPG, PNG — cualquier formato</strong></p>
   </div>
-  <input type="file" id="filePicker" accept=".pdf,.PDF">
+  <input type="file" id="filePicker" accept=".pdf,.PDF,.jpg,.jpeg,.JPG,.JPEG,.png,.PNG,.heic,.HEIC,.webp,.WEBP">
   <div class="archivo-sel" id="archivoSel"></div>
 
   <button id="btn" disabled onclick="subir()">Subir factura</button>
@@ -147,8 +147,10 @@ zona.addEventListener('dragleave', () => zona.classList.remove('drag'));
 zona.addEventListener('drop', e => {
   e.preventDefault(); zona.classList.remove('drag');
   const f = e.dataTransfer.files[0];
-  if (f && f.name.toLowerCase().endsWith('.pdf')) seleccionarArchivo(f);
-  else mostrarEstado('Solo se admiten archivos PDF', 'error');
+  const ext = f ? f.name.split('.').pop().toLowerCase() : '';
+  const admitidos = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'bmp', 'tiff', 'tif'];
+  if (f && admitidos.includes(ext)) seleccionarArchivo(f);
+  else mostrarEstado('Formato no admitido. Usa PDF, JPG, PNG, HEIC o WEBP', 'error');
 });
 
 function seleccionarArchivo(f) {
