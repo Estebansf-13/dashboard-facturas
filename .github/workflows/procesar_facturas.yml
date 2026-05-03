@@ -1,10 +1,9 @@
-name: Procesar Facturas — Empresa 1 (pdfplumber + OCR + Gemini)
+name: Procesar Facturas — Empresa 1
 
 on:
   push:
     paths:
-      - 'empresa-original-prueba-1/facturas/nuevas/**.pdf'
-      - 'empresa-original-prueba-1/facturas/nuevas/**.PDF'
+      - 'empresa-original-prueba-1/facturas/nuevas/**'
 
 jobs:
   procesar:
@@ -22,10 +21,10 @@ jobs:
           python-version: '3.11'
 
       - name: Instalar Tesseract OCR y poppler
-        run: sudo apt-get install -y tesseract-ocr tesseract-ocr-spa poppler-utils
+        run: sudo apt-get install -y tesseract-ocr tesseract-ocr-spa poppler-utils libheif-dev
 
       - name: Instalar dependencias Python
-        run: pip install pdfplumber pdf2image pillow pytesseract google-generativeai
+        run: pip install pdfplumber pdf2image pillow pillow-heif pytesseract google-generativeai
 
       - name: Procesar facturas nuevas
         env:

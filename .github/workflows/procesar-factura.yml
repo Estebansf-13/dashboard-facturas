@@ -3,7 +3,7 @@ name: Procesar factura nueva — Empresa 1
 on:
   push:
     paths:
-      - 'empresa-original-prueba-1/facturas/nuevas/**'
+      - '_DESACTIVADO_usar_procesar_facturas.yml'
 
 permissions:
   contents: write
