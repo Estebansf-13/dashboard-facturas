@@ -1,9 +1,27 @@
 {
-  "fecha_generacion": "2026-05-04",
+  "fecha_generacion": "2026-05-03",
   "rango": "",
   "emisor_propio": {
     "nombre": "Carmen Fortes Pardo",
     "cif": "22972441H"
   },
-  "facturas": []
+  "facturas": [
+    {
+      "archivo": "gastos/factura-1-000908.pdf",
+      "tipo": "gasto",
+      "numero": "factura-1-000908",
+      "fecha": "2025-11-24",
+      "emisor": "RAI AUTOMOCION",
+      "receptor": "mantener el fin del tratamiento o mientras existan prescripciones legales",
+      "concepto": "CANTIDAD PRECIOUND. SUBTOTAL DTO. TOTAL",
+      "base_imponible": 0.83,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 0.17,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0.0,
+      "total": 1.0,
+      "moneda": "EUR",
+      "estado": "confirmado"
+    }
+  ]
 }
