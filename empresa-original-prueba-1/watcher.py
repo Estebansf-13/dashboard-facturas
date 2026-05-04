@@ -27,6 +27,7 @@ BASE_DIR = Path(__file__).parent
 NUEVAS_DIR = BASE_DIR / "facturas" / "nuevas"
 INGRESOS_DIR = BASE_DIR / "facturas" / "ingresos"
 GASTOS_DIR = BASE_DIR / "facturas" / "gastos"
+ARCHIVADAS_DIR = BASE_DIR / "facturas" / "archivadas"
 JSON_PATH = BASE_DIR / "facturas_datos.json"
 
 # Datos del emisor propio (para clasificar ingreso vs gasto)
@@ -306,6 +307,61 @@ def procesar_factura(filepath: str):
     publicar_en_github(datos["numero"])
 
 
+def archivar_factura(filepath: str):
+    """Elimina del JSON la factura cuyo PDF ha sido movido a archivadas/."""
+    filename = os.path.basename(filepath)
+    print(f"\n{'='*60}")
+    print(f"Factura archivada: {filename}")
+    print(f"{'='*60}")
+
+    with open(JSON_PATH, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    antes = len(data["facturas"])
+    data["facturas"] = [f for f in data["facturas"] if os.path.basename(f.get("archivo", "")) != filename]
+    despues = len(data["facturas"])
+
+    if antes == despues:
+        print(f"  No se encontró {filename} en el JSON — nada que eliminar.")
+        return
+
+    data["fecha_generacion"] = time.strftime("%Y-%m-%d")
+    with open(JSON_PATH, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"  Eliminada del dashboard. Subiendo a GitHub...")
+    try:
+        rel_json = JSON_PATH.relative_to(BASE_DIR.parent)
+        subprocess.run(['git', 'add', str(rel_json)], cwd=BASE_DIR.parent, check=True)
+        subprocess.run(['git', 'commit', '-m', f'Empresa 1: factura {filename} archivada'], cwd=BASE_DIR.parent, check=True)
+        subprocess.run(['git', 'push'], cwd=BASE_DIR.parent, check=True)
+        print(f"  Dashboard actualizado.")
+    except Exception as e:
+        print(f"  No se pudo subir a GitHub: {e}")
+
+
+class ArchivarFacturaHandler(FileSystemEventHandler):
+    """Handler que reacciona cuando un PDF aparece en facturas/archivadas/."""
+
+    def __init__(self):
+        self.procesados = set()
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        filepath = event.src_path
+        if not filepath.lower().endswith('.pdf'):
+            return
+        if filepath in self.procesados:
+            return
+        time.sleep(1)
+        self.procesados.add(filepath)
+        try:
+            archivar_factura(filepath)
+        except Exception as e:
+            print(f"  Error archivando {filepath}: {e}")
+
+
 class NuevaFacturaHandler(FileSystemEventHandler):
     """Handler que reacciona cuando aparece un nuevo PDF en facturas/nuevas/."""
 
@@ -335,6 +391,7 @@ def main():
     NUEVAS_DIR.mkdir(parents=True, exist_ok=True)
     INGRESOS_DIR.mkdir(parents=True, exist_ok=True)
     GASTOS_DIR.mkdir(parents=True, exist_ok=True)
+    ARCHIVADAS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
     print("Sincronizando con GitHub...")
@@ -355,8 +412,10 @@ def main():
     print("=" * 60)
 
     handler = NuevaFacturaHandler()
+    archivar_handler = ArchivarFacturaHandler()
     observer = Observer()
     observer.schedule(handler, str(NUEVAS_DIR), recursive=False)
+    observer.schedule(archivar_handler, str(ARCHIVADAS_DIR), recursive=False)
     observer.start()
 
     try:

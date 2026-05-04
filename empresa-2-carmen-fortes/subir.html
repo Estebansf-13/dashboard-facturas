@@ -65,6 +65,26 @@
     background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.3);
     border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 13px; color: #d29922;
   }
+  .separador {
+    border-top: 1px solid #2a3441; margin: 28px 0;
+  }
+  .btn-archivar-toggle {
+    background: #2a3441; color: #8b96a5; font-size: 14px; padding: 12px 24px;
+    border-radius: 8px; cursor: pointer; width: 100%; border: 1px solid #2a3441;
+    margin-bottom: 0;
+  }
+  .btn-archivar-toggle:hover { background: #333f50; color: #e6edf3; opacity: 1; }
+  .seccion-archivar { display: none; margin-top: 16px; text-align: left; }
+  .seccion-archivar .desc { font-size: 13px; color: #8b96a5; margin-bottom: 12px; }
+  select {
+    width: 100%; background: #0f1419; border: 1px solid #2a3441; border-radius: 8px;
+    padding: 10px 12px; color: #e6edf3; font-size: 13px; margin-bottom: 12px; outline: none;
+  }
+  select:focus { border-color: #6ea8fe; }
+  .btn-confirmar-archivar {
+    background: #da3633; color: #fff; font-size: 15px; font-weight: 600;
+  }
+  .btn-confirmar-archivar:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -89,6 +109,19 @@
 
   <div class="estado" id="estado"></div>
 
+  <div class="separador"></div>
+
+  <button class="btn-archivar-toggle" onclick="toggleArchivar()">Archivar una factura (ocultarla del dashboard)</button>
+
+  <div class="seccion-archivar" id="seccionArchivar">
+    <p class="desc">Selecciona la factura que quieres ocultar. Seguirá guardada pero no aparecerá en el dashboard.</p>
+    <select id="selectFactura" onchange="document.getElementById('btnArchivar').disabled = !this.value">
+      <option value="">Cargando facturas...</option>
+    </select>
+    <button id="btnArchivar" class="btn-confirmar-archivar" disabled onclick="archivar()">Archivar (ocultar del dashboard)</button>
+    <div class="estado" id="estadoArchivar"></div>
+  </div>
+
   <div class="link-dashboard">
     <a href="https://estebansf-13.github.io/dashboard-facturas/empresa-2-carmen-fortes/dashboard-facturacion.html" target="_blank">Ver dashboard →</a>
   </div>
@@ -106,6 +139,8 @@
 <script>
 const STORAGE_TOKEN = 'gf_token_empresa2';
 const STORAGE_REPO  = 'gf_repo_empresa2';
+const EMPRESA_PATH  = 'empresa-2-carmen-fortes';
+const EMPRESA_LABEL = 'Carmen Fortes';
 
 let archivoActual = null;
 
@@ -172,7 +207,7 @@ async function subir() {
 
   try {
     const base64 = await toBase64(archivoActual);
-    const path = `empresa-2-carmen-fortes/facturas/nuevas/${archivoActual.name}`;
+    const path = `${EMPRESA_PATH}/facturas/nuevas/${archivoActual.name}`;
     const url = `https://api.github.com/repos/${getRepo()}/contents/${path}`;
 
     let sha = null;
@@ -181,7 +216,7 @@ async function subir() {
       if (check.ok) { const d = await check.json(); sha = d.sha; }
     } catch (e) {}
 
-    const body = { message: `Carmen Fortes: nueva factura ${archivoActual.name}`, content: base64 };
+    const body = { message: `${EMPRESA_LABEL}: nueva factura ${archivoActual.name}`, content: base64 };
     if (sha) body.sha = sha;
 
     const res = await fetch(url, {
@@ -206,6 +241,101 @@ async function subir() {
   }
 }
 
+async function toggleArchivar() {
+  const sec = document.getElementById('seccionArchivar');
+  if (sec.style.display === 'none') {
+    sec.style.display = 'block';
+    await cargarFacturas();
+  } else {
+    sec.style.display = 'none';
+  }
+}
+
+async function cargarFacturas() {
+  const token = getToken();
+  const select = document.getElementById('selectFactura');
+  select.innerHTML = '<option value="">Cargando...</option>';
+
+  try {
+    const url = `https://api.github.com/repos/${getRepo()}/contents/${EMPRESA_PATH}/facturas_datos.json`;
+    const headers = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error('No se pudo cargar la lista');
+    const file = await res.json();
+    const data = JSON.parse(atob(file.content.replace(/\n/g, '')));
+
+    if (!data.facturas || data.facturas.length === 0) {
+      select.innerHTML = '<option value="">No hay facturas en el dashboard</option>';
+      return;
+    }
+
+    select.innerHTML = '<option value="">-- Elige la factura a archivar --</option>';
+    data.facturas.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.archivo;
+      const label = [f.fecha, f.emisor || f.receptor, f.total ? f.total + ' €' : '', f.archivo].filter(Boolean).join(' · ');
+      opt.textContent = label;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    select.innerHTML = '<option value="">Error al cargar. ¿Token configurado?</option>';
+  }
+}
+
+async function archivar() {
+  const token = getToken();
+  if (!token) { mostrarEstadoArchivar('Configura el token primero', 'error'); return; }
+
+  const archivo = document.getElementById('selectFactura').value;
+  if (!archivo) return;
+
+  const filename = archivo.split('/').pop();
+  const btnArchivar = document.getElementById('btnArchivar');
+  btnArchivar.disabled = true;
+  mostrarEstadoArchivar('Archivando...', 'cargando');
+
+  try {
+    const repo = getRepo();
+    const baseHeaders = { Authorization: `token ${token}`, 'Content-Type': 'application/json' };
+
+    // 1. Obtener el archivo original (contenido + SHA)
+    const urlOriginal = `https://api.github.com/repos/${repo}/contents/${EMPRESA_PATH}/facturas/${archivo}`;
+    const resGet = await fetch(urlOriginal, { headers: baseHeaders });
+    if (!resGet.ok) throw new Error('No se encontró el archivo en el repositorio');
+    const fileData = await resGet.json();
+
+    // 2. Crear el archivo en archivadas/
+    const urlArchivadas = `https://api.github.com/repos/${repo}/contents/${EMPRESA_PATH}/facturas/archivadas/${filename}`;
+    const resPut = await fetch(urlArchivadas, {
+      method: 'PUT',
+      headers: baseHeaders,
+      body: JSON.stringify({
+        message: `${EMPRESA_LABEL}: factura ${filename} archivada`,
+        content: fileData.content.replace(/\n/g, '')
+      })
+    });
+    if (!resPut.ok) throw new Error('No se pudo mover el archivo a archivadas');
+
+    // 3. Eliminar el archivo de su ubicación original
+    const resDel = await fetch(urlOriginal, {
+      method: 'DELETE',
+      headers: baseHeaders,
+      body: JSON.stringify({
+        message: `${EMPRESA_LABEL}: eliminar ${filename} de carpeta activa`,
+        sha: fileData.sha
+      })
+    });
+    if (!resDel.ok) throw new Error('No se pudo eliminar el archivo original');
+
+    mostrarEstadoArchivar('✓ Factura archivada. El dashboard se actualiza en 1-2 minutos.', 'ok');
+    await cargarFacturas();
+  } catch (e) {
+    mostrarEstadoArchivar('Error: ' + e.message, 'error');
+    btnArchivar.disabled = false;
+  }
+}
+
 function toBase64(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
@@ -219,6 +349,13 @@ function mostrarEstado(msg, tipo) {
   estadoDiv.textContent = msg;
   estadoDiv.className = 'estado ' + tipo;
   estadoDiv.style.display = 'block';
+}
+
+function mostrarEstadoArchivar(msg, tipo) {
+  const div = document.getElementById('estadoArchivar');
+  div.textContent = msg;
+  div.className = 'estado ' + tipo;
+  div.style.display = 'block';
 }
 
 init();
