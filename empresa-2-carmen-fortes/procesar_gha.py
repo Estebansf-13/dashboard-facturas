@@ -145,12 +145,13 @@ def _limpiar_datos_gemini(datos):
     for campo in ['base_imponible', 'iva_cantidad', 'irpf_cantidad', 'total']:
         val = datos.get(campo, 0)
         if isinstance(val, str):
-            val = val.replace(',', '.').replace(' ', '').replace('€', '')
+            val = parsear_importe(val)
+        else:
             try:
-                val = float(val)
-            except ValueError:
+                val = float(val or 0)
+            except (TypeError, ValueError):
                 val = 0.0
-        datos[campo] = float(val or 0)
+        datos[campo] = val
     for campo in ['iva_porcentaje', 'irpf_porcentaje']:
         val = datos.get(campo, 0)
         try:
@@ -302,13 +303,17 @@ def extraer_con_tesseract(filepath):
 # ── Parseo de importes ────────────────────────────────────────────────────────
 
 def parsear_importe(texto):
-    texto = str(texto).strip().replace(' ', '').replace('€', '')
+    texto = str(texto).strip()
+    negativo = texto.startswith('(') and texto.endswith(')')
+    texto = re.sub(r'\s*(euros?|eur)\s*', '', texto, flags=re.IGNORECASE)
+    texto = texto.replace('€', '').replace(' ', '').strip('()')
     if ',' in texto and '.' in texto:
         texto = texto.replace('.', '').replace(',', '.')
     elif ',' in texto:
         texto = texto.replace(',', '.')
     try:
-        return float(texto)
+        val = float(texto)
+        return -val if negativo else val
     except Exception:
         return 0.0
 
@@ -327,6 +332,7 @@ def extraer_datos_texto(texto):
         r'[Nn][úu]mero\s+de\s+(?:factura|albar[aá]n)[:\s]+(\S+)',
         r'(?:FACTURA|Factura|ALBAR[AÁ]N)\s+[Nn][°ºo\.]\s*(\S+)',
         r'(?:FACTURA|Factura)\s+N[°ºo]\s*[:.\s]*(\S+)',
+        r'(?:FACTURA|Factura)\s+([0-9]{1,6})\b',
     ]:
         m = re.search(pat, texto, re.IGNORECASE)
         if m:
@@ -373,7 +379,7 @@ def extraer_datos_texto(texto):
         d["base_imponible"] = parsear_importe(m.group(1))
 
     # IVA con porcentaje: "IVA 21% 378,00" / "I.V.A. 21%: 378,00"
-    m = re.search(r'I\.?V\.?A\.?\s*(\d+)\s*%[^\S\n]*[:\s€]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
+    m = re.search(r'I\.?V\.?A\.?\s*(\d+)\s*%[^\S\n]*[:\s€]*([0-9]+(?:[.,][0-9]+)?)', texto, re.IGNORECASE)
     if m:
         d["iva_porcentaje"] = int(m.group(1))
         d["iva_cantidad"] = parsear_importe(m.group(2))
@@ -384,22 +390,25 @@ def extraer_datos_texto(texto):
             d["iva_cantidad"] = parsear_importe(m.group(1))
 
     # IRPF con porcentaje: "IRPF -15% 79,12" / "IRPF (15%): 79,12"
-    m = re.search(r'IRPF\s*[\-\(]?\s*(\d+)\s*%\)?[^\S\n]*[:\s€]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
+    m = re.search(r'(?:Retenci[oó]n\s+)?IRPF\s*[\-\(]?\s*(\d+)\s*%\)?[^\S\n]*[:\s€]*([0-9]+(?:[.,][0-9]+)?)', texto, re.IGNORECASE)
     if m:
         d["irpf_porcentaje"] = int(m.group(1))
         d["irpf_cantidad"] = parsear_importe(m.group(2))
     else:
-        # Minuta de honorarios: "- IRPF sobre Honorarios y Gastos   79,12" (sin porcentaje)
-        m = re.search(r'[\-−]\s*IRPF[^0-9\n]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
+        # Sin porcentaje: "- IRPF sobre Honorarios y Gastos 79,12", "Retención IRPF: 79,12", "IRPF Retenido 79"
+        m = re.search(r'(?:Retenci[oó]n\s+)?IRPF\b[^0-9\n%]*([0-9]+(?:[.,][0-9]+)?)', texto, re.IGNORECASE)
         if m:
             d["irpf_cantidad"] = parsear_importe(m.group(1))
 
-    # TOTAL — requiere número con decimales (p.ej. 430,51) para no capturar "1" de número de línea
-    # No cruza líneas (usa [^\S\n] en vez de \s)
+    # TOTAL — prioriza keywords específicos antes que TOTAL genérico; admite enteros (sin decimales)
     m = re.search(
-        r'TOTAL[^\S\n]*(?:FACTURA|NETO|A\s+PAGAR|MINUTA|IMPORTE|:)?[^\S\n€]*([0-9]+[.,][0-9]+)',
+        r'TOTAL[^\S\n]+(?:FACTURA|NETO|A\s+PAGAR|MINUTA|IMPORTE)[^\S\n€]*([0-9]+(?:[.,][0-9]+)?)',
         texto, re.IGNORECASE
     )
+    if not m:
+        m = re.search(r'TOTAL\s*:[^\S\n€]*([0-9]+(?:[.,][0-9]+)?)', texto, re.IGNORECASE)
+    if not m:
+        m = re.search(r'\bTOTAL\b[^\S\n€]*([0-9]+(?:[.,][0-9]+)?)', texto, re.IGNORECASE)
     if m:
         d["total"] = parsear_importe(m.group(1))
 
@@ -417,6 +426,7 @@ def extraer_datos_texto(texto):
     if d["base_imponible"] == 0 and d["iva_cantidad"] == 0 and d["total"] > 0:
         d["base_imponible"] = round(d["total"] / 1.21, 2)
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
+        d["_base_estimada"] = True  # base reconstruida asumiendo 21% — puede ser incorrecto
     elif d["iva_cantidad"] == 0 and d["base_imponible"] > 0 and d["total"] > d["base_imponible"]:
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"] - abs(d["irpf_cantidad"]), 2)
     elif d["total"] == 0 and d["base_imponible"] > 0:
@@ -492,7 +502,7 @@ def construir_registro(datos_brutos, nombre_archivo):
     irpf_pct = abs(int(datos_brutos.get("irpf_porcentaje") or 0))
     irpf_cant = abs(float(datos_brutos.get("irpf_cantidad") or 0))
 
-    return {
+    registro = {
         "archivo": f"{'ingresos' if tipo == 'ingreso' else 'gastos'}/{nombre_archivo}",
         "tipo": tipo,
         "numero": str(datos_brutos.get("numero") or Path(nombre_archivo).stem),
@@ -509,6 +519,12 @@ def construir_registro(datos_brutos, nombre_archivo):
         "moneda": "EUR",
         "estado": "confirmado"
     }
+
+    # Marcar pendiente si base es 0 (Gemini no la extrajo) o fue estimada al 21%
+    if (registro["base_imponible"] <= 0 and registro["total"] > 0) or datos_brutos.get("_base_estimada"):
+        registro["estado"] = "pendiente_revision"
+
+    return registro
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
