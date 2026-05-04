@@ -39,6 +39,23 @@
       "total": 430.51,
       "moneda": "EUR",
       "estado": "confirmado"
+    },
+    {
+      "archivo": "gastos/Minuta stro  01202400140907.pdf",
+      "tipo": "gasto",
+      "numero": "Minuta stro  01202400140907",
+      "fecha": "2026-05-01",
+      "emisor": "SEGUROS Y REASEGUROS,",
+      "receptor": "",
+      "concepto": "",
+      "base_imponible": 462.07,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 97.04,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0.0,
+      "total": 559.11,
+      "moneda": "EUR",
+      "estado": "confirmado"
     }
   ]
 }
