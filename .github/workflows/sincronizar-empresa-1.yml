@@ -1,12 +1,14 @@
-name: Archivar Factura — Carmen Fortes
+name: Sincronizar Dashboard — Empresa 1
 
 on:
   push:
     paths:
-      - 'empresa-2-carmen-fortes/facturas/archivadas/**'
+      - 'empresa-original-prueba-1/facturas/ingresos/**'
+      - 'empresa-original-prueba-1/facturas/gastos/**'
+      - 'empresa-original-prueba-1/facturas/archivadas/**'
 
 jobs:
-  archivar:
+  sincronizar:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -16,25 +18,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Eliminar facturas archivadas del dashboard
+      - name: Eliminar del JSON las facturas cuyos archivos ya no existen
         run: |
           python3 - <<'EOF'
           import json, os, time
           from pathlib import Path
 
-          BASE_DIR = Path("empresa-2-carmen-fortes")
-          ARCHIVADAS_DIR = BASE_DIR / "facturas" / "archivadas"
+          BASE_DIR = Path("empresa-original-prueba-1")
           JSON_PATH = BASE_DIR / "facturas_datos.json"
 
-          archivadas = {p.name for p in ARCHIVADAS_DIR.glob("*") if p.suffix.lower() in ('.pdf', '.jpg', '.jpeg', '.png', '.heic', '.webp')}
-          print(f"Archivos en archivadas: {archivadas}")
+          # Archivos PDF que existen actualmente en ingresos/ y gastos/
+          existentes = set()
+          for carpeta in ["ingresos", "gastos"]:
+              d = BASE_DIR / "facturas" / carpeta
+              if d.exists():
+                  for p in d.iterdir():
+                      if p.suffix.lower() in ('.pdf', '.jpg', '.jpeg', '.png', '.heic', '.webp'):
+                          existentes.add(p.name)
+
+          print(f"Archivos activos: {existentes}")
 
           with open(JSON_PATH, 'r', encoding='utf-8') as f:
               data = json.load(f)
 
           antes = len(data["facturas"])
           data["facturas"] = [f for f in data["facturas"]
-                              if os.path.basename(f.get("archivo", "")) not in archivadas]
+                              if os.path.basename(f.get("archivo", "")) in existentes]
           despues = len(data["facturas"])
 
           if antes != despues:
@@ -50,7 +59,7 @@ jobs:
         run: |
           git config user.name "Dashboard Bot"
           git config user.email "bot@dashboard-facturas"
-          git add empresa-2-carmen-fortes/facturas_datos.json empresa-2-carmen-fortes/facturas/
-          git diff --staged --quiet || git commit -m "Carmen Fortes: factura archivada [skip ci]"
+          git add empresa-original-prueba-1/facturas_datos.json
+          git diff --staged --quiet || git commit -m "Empresa 1: dashboard sincronizado [skip ci]"
           git pull --rebase origin main
           git push
