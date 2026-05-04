@@ -320,6 +320,27 @@ def parsear_importe(texto):
 
 # ── Extracción con regex (pdfplumber / Tesseract) ─────────────────────────────
 
+def _detectar_tasa_iva(texto):
+    """Escanea el texto buscando la tasa de IVA (4, 10, 21) o exención.
+    Devuelve el entero encontrado (0 = exento), o None si no se identifica."""
+    # Primero: buscar porcentaje junto a "IVA" (mayor fiabilidad)
+    for pat in [
+        r'I\.?V\.?A\.?\D{0,25}(\b21\b|\b10\b|\b4\b)\s*%',
+        r'(\b21\b|\b10\b|\b4\b)\s*%\D{0,25}I\.?V\.?A\.?',
+    ]:
+        m = re.search(pat, texto, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+    # Exento de IVA
+    if re.search(r'exento\s+(?:de\s+)?I\.?V\.?A\.?|I\.?V\.?A\.?\s+exento|0\s*%', texto, re.IGNORECASE):
+        return 0
+    # Último recurso: porcentaje estándar en cualquier parte del documento
+    m = re.search(r'(?<!\d)(21|10|4)(?!\d)\s*%', texto)
+    if m:
+        return int(m.group(1))
+    return None  # no detectado → reconstrucción incierta
+
+
 def extraer_datos_texto(texto):
     d = {
         "numero": "", "fecha": "", "emisor": "", "receptor": "", "concepto": "",
@@ -424,9 +445,19 @@ def extraer_datos_texto(texto):
 
     # Reconstruir campos que falten — solo si no tenemos base NI IVA (fallback de último recurso)
     if d["base_imponible"] == 0 and d["iva_cantidad"] == 0 and d["total"] > 0:
-        d["base_imponible"] = round(d["total"] / 1.21, 2)
-        d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
-        d["_base_estimada"] = True  # base reconstruida asumiendo 21% — puede ser incorrecto
+        tasa = _detectar_tasa_iva(texto)
+        if tasa is not None:
+            # Tasa detectada en el propio documento → reconstrucción fiable
+            divisor = 1 + tasa / 100
+            d["base_imponible"] = round(d["total"] / divisor, 2) if tasa > 0 else d["total"]
+            d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
+            d["iva_porcentaje"] = tasa
+        else:
+            # Sin tasa identificada → asumir 21%, marcar para revisión manual
+            d["base_imponible"] = round(d["total"] / 1.21, 2)
+            d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
+            d["iva_porcentaje"] = 21
+            d["_base_estimada"] = True
     elif d["iva_cantidad"] == 0 and d["base_imponible"] > 0 and d["total"] > d["base_imponible"]:
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"] - abs(d["irpf_cantidad"]), 2)
     elif d["total"] == 0 and d["base_imponible"] > 0:
