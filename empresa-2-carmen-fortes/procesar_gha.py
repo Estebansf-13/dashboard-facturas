@@ -77,6 +77,15 @@ Reglas IMPORTANTES para identificar emisor y receptor en facturas españolas:
 - La fecha en formato YYYY-MM-DD (ej: 2025-11-24)
 - Si no encuentras algún campo, usa "" para texto o 0.00 para números
 - NUNCA inventes datos: si no está claro, usa 0.00
+
+FORMATO ESPECIAL — MINUTA DE HONORARIOS (procuradores, abogados):
+En este tipo de documentos los campos aparecen SIN porcentaje explícito:
+  "Base Imponible de Honorarios y Gastos   527,46"  → base_imponible = 527.46
+  "+ I.V.A. sobre Honorarios y Gastos      110,77"  → iva_cantidad = 110.77 (calcula iva_porcentaje = round(110.77/527.46*100) = 21)
+  "- IRPF sobre Honorarios y Gastos         79,12"  → irpf_cantidad = 79.12 (calcula irpf_porcentaje = round(79.12/527.46*100) = 15)
+  "Total Minuta                            559,11"  → total = 559.11
+ATENCIÓN: "Total Derechos" o "Total Honorarios" NO es el total final — ignóralos.
+Verifica siempre que base_imponible + iva_cantidad - irpf_cantidad = total (con ±0.10 € de tolerancia).
 """
 
 
@@ -149,6 +158,17 @@ def _limpiar_datos_gemini(datos):
         except (ValueError, TypeError):
             datos[campo] = 21 if campo == 'iva_porcentaje' else 0
     return datos
+
+
+def validar_coherencia(datos):
+    """True si base_imponible + iva_cantidad - irpf_cantidad ≈ total (±0.10 €)."""
+    base = float(datos.get("base_imponible") or 0)
+    iva = float(datos.get("iva_cantidad") or 0)
+    irpf = abs(float(datos.get("irpf_cantidad") or 0))
+    total = float(datos.get("total") or 0)
+    if total <= 0 or base <= 0:
+        return False
+    return abs(base + iva - irpf - total) <= 0.10
 
 
 def extraer_con_gemini_pdf(filepath):
@@ -344,24 +364,35 @@ def extraer_datos_texto(texto):
     if m:
         d["concepto"] = m.group(1).strip()
 
-    # Base imponible — acepta "Base imponible", "BASE IMPONIBLE", "Base imp.", "BASE:"
-    m = re.search(r'[Bb]ase\.?\s*[Ii]mponible\.?[:\s€]*([0-9]+[.,][0-9]+)', texto)
+    # Base imponible — acepta "Base imponible:", "BASE IMPONIBLE", y
+    # "Base Imponible de Honorarios y Gastos" (minuta de procurador/abogado)
+    m = re.search(r'[Bb]ase\.?\s*[Ii]mponible[^0-9\n]*([0-9]+[.,][0-9]+)', texto)
     if not m:
         m = re.search(r'\bBASE[:\s€]+([0-9]+[.,][0-9]+)', texto)
     if m:
         d["base_imponible"] = parsear_importe(m.group(1))
 
-    # IVA — acepta "IVA", "I.V.A.", "IVA 21%", "I.V.A. 21%"
+    # IVA con porcentaje: "IVA 21% 378,00" / "I.V.A. 21%: 378,00"
     m = re.search(r'I\.?V\.?A\.?\s*(\d+)\s*%[^\S\n]*[:\s€]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
     if m:
         d["iva_porcentaje"] = int(m.group(1))
         d["iva_cantidad"] = parsear_importe(m.group(2))
+    else:
+        # Minuta de honorarios: "+ I.V.A. sobre Honorarios y Gastos   110,77" (sin porcentaje)
+        m = re.search(r'I\.?V\.?A\.[^0-9\n]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
+        if m:
+            d["iva_cantidad"] = parsear_importe(m.group(1))
 
-    # IRPF — acepta "IRPF 15%", "IRPF -15%", "IRPF (15%)", "- IRPF 15%"
+    # IRPF con porcentaje: "IRPF -15% 79,12" / "IRPF (15%): 79,12"
     m = re.search(r'IRPF\s*[\-\(]?\s*(\d+)\s*%\)?[^\S\n]*[:\s€]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
     if m:
         d["irpf_porcentaje"] = int(m.group(1))
         d["irpf_cantidad"] = parsear_importe(m.group(2))
+    else:
+        # Minuta de honorarios: "- IRPF sobre Honorarios y Gastos   79,12" (sin porcentaje)
+        m = re.search(r'[\-−]\s*IRPF[^0-9\n]*([0-9]+[.,][0-9]+)', texto, re.IGNORECASE)
+        if m:
+            d["irpf_cantidad"] = parsear_importe(m.group(1))
 
     # TOTAL — requiere número con decimales (p.ej. 430,51) para no capturar "1" de número de línea
     # No cruza líneas (usa [^\S\n] en vez de \s)
@@ -372,12 +403,22 @@ def extraer_datos_texto(texto):
     if m:
         d["total"] = parsear_importe(m.group(1))
 
-    # Reconstruir campos que falten
-    if d["base_imponible"] == 0 and d["total"] > 0:
+    # Calcular porcentajes cuando solo tenemos cantidades (formato minuta)
+    if d["iva_cantidad"] > 0 and d["base_imponible"] > 0 and d["iva_porcentaje"] == 21:
+        pct = round(d["iva_cantidad"] / d["base_imponible"] * 100)
+        if pct in [4, 10, 21]:
+            d["iva_porcentaje"] = pct
+    if d["irpf_cantidad"] > 0 and d["base_imponible"] > 0 and d["irpf_porcentaje"] == 0:
+        pct = round(d["irpf_cantidad"] / d["base_imponible"] * 100)
+        if 1 <= pct <= 20:
+            d["irpf_porcentaje"] = pct
+
+    # Reconstruir campos que falten — solo si no tenemos base NI IVA (fallback de último recurso)
+    if d["base_imponible"] == 0 and d["iva_cantidad"] == 0 and d["total"] > 0:
         d["base_imponible"] = round(d["total"] / 1.21, 2)
         d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
     elif d["iva_cantidad"] == 0 and d["base_imponible"] > 0 and d["total"] > d["base_imponible"]:
-        d["iva_cantidad"] = round(d["total"] - d["base_imponible"], 2)
+        d["iva_cantidad"] = round(d["total"] - d["base_imponible"] - abs(d["irpf_cantidad"]), 2)
     elif d["total"] == 0 and d["base_imponible"] > 0:
         d["total"] = round(d["base_imponible"] + d["iva_cantidad"] - d["irpf_cantidad"], 2)
 
@@ -498,9 +539,11 @@ def main():
         if ext in EXTENSIONES_PDF:
             print("  Enviando PDF nativo a Gemini...")
             datos = extraer_con_gemini_pdf(str(archivo))
-            if datos and float(datos.get("total") or 0) > 0:
+            if datos and validar_coherencia(datos):
                 print(f"  Gemini PDF OK — Total: {datos['total']} EUR")
             else:
+                if datos and float(datos.get("total") or 0) > 0:
+                    print(f"  Gemini PDF: datos incoherentes (base+IVA-IRPF≠total) — reintentando con visión...")
                 datos = None
 
         # Paso 2: Gemini Vision con imagen (PDF → JPEG → Gemini)
@@ -508,12 +551,12 @@ def main():
         if not datos:
             print("  Gemini Vision (imagen)...")
             vision = extraer_con_gemini(str(archivo))
-            if vision and float(vision.get("total") or 0) > 0:
+            if vision and validar_coherencia(vision):
                 datos = vision
                 print(f"  Gemini Vision OK — Total: {datos['total']} EUR")
-            elif vision and float(vision.get("base_imponible") or 0) > 0:
+            elif vision and float(vision.get("total") or 0) > 0:
                 datos = vision
-                print(f"  Gemini Vision OK (sin total explícito) — Base: {datos['base_imponible']} EUR")
+                print(f"  Gemini Vision OK (sin base explícita) — Total: {datos['total']} EUR")
 
         # Paso 3: Tesseract (solo si Gemini no está disponible — sin GEMINI_API_KEY)
         if not datos or datos.get("total", 0) == 0:
