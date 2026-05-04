@@ -7,23 +7,6 @@
   },
   "facturas": [
     {
-      "archivo": "gastos/factura-1-000908.pdf",
-      "tipo": "gasto",
-      "numero": "000908",
-      "fecha": "2025-11-24",
-      "emisor": "RAI AUTOMOCION",
-      "receptor": "Carmen Fortes Pardo",
-      "concepto": "Cambio alternador, correas aux. y carga batería — BMW 8152FBV",
-      "base_imponible": 355.79,
-      "iva_porcentaje": 21,
-      "iva_cantidad": 74.72,
-      "irpf_porcentaje": 0,
-      "irpf_cantidad": 0.0,
-      "total": 430.51,
-      "moneda": "EUR",
-      "estado": "confirmado"
-    },
-    {
       "archivo": "ingresos/bb.pdf",
       "tipo": "ingreso",
       "numero": "bb",
@@ -37,6 +20,23 @@
       "irpf_porcentaje": 0,
       "irpf_cantidad": 0.0,
       "total": 181.35,
+      "moneda": "EUR",
+      "estado": "confirmado"
+    },
+    {
+      "archivo": "gastos/factura-1-000908.pdf",
+      "tipo": "gasto",
+      "numero": "factura-1-000908",
+      "fecha": "2025-11-24",
+      "emisor": "RAI AUTOMOCION",
+      "receptor": "mantener el fin del tratamiento o mientras existan prescripciones legales",
+      "concepto": "CANTIDAD PRECIOUND. SUBTOTAL DTO. TOTAL",
+      "base_imponible": 355.79,
+      "iva_porcentaje": 21,
+      "iva_cantidad": 74.72,
+      "irpf_porcentaje": 0,
+      "irpf_cantidad": 0.0,
+      "total": 430.51,
       "moneda": "EUR",
       "estado": "confirmado"
     }
